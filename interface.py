@@ -487,7 +487,7 @@ with tab_simulador:
                 }
 
                 function handleBarraClick(barra) {
-                    if (!connectMode) return;
+                    if (!connectMode) { selectElement(barra, 'barra'); return; }
                     if (!connectStartBarra) {
                         connectStartBarra = barra; barra.el.classList.add("selected");
                     } else {
@@ -649,7 +649,11 @@ with tab_simulador:
                     let drag = false, sx, sy;
                     el.addEventListener('mousedown', e => {
                         e.stopPropagation(); drag = true; sx = e.clientX-item.x; sy = e.clientY-item.y;
-                        handleBarraClick(item);
+                        if (connectMode) {
+                            handleBarraClick(item);
+                        } else {
+                            selectElement(item, 'barra');
+                        }
                     });
                     document.addEventListener('mousemove', e => {
                         if (!drag) return;
@@ -1028,6 +1032,106 @@ with tab_simulador:
                             st.markdown(f"**Novo estado ($\\nu={nu+1}$):**")
                             st.latex(r"\theta^{(" + str(nu+1) + r")} = " + formatar_vetor_latex(dados_iter['theta_prox']))
                             st.latex(r"V^{(" + str(nu+1) + r")} = "      + formatar_vetor_latex(dados_iter['V_prox']))
+
+                # ── Tabela de convergência por iteração ──────────
+                st.markdown("---")
+                st.markdown("### 🔹 Histórico de Convergência")
+                hist_conv = []
+                for s in log_iteracoes:
+                    hist_conv.append({
+                        "Iteração ν":      s['nu'],
+                        "Erro máximo":     f"{s['erro']:.4e}",
+                        "Convergiu?":      "✅ Sim" if s['convergiu'] else "❌ Não",
+                    })
+                st.dataframe(pd.DataFrame(hist_conv), hide_index=True)
+
+                # ── Fluxos nas linhas ──────────────────────────────
+                st.markdown("---")
+                st.markdown("### 🔹 Fluxos de Potência nos Ramos")
+
+                from mismatch import calc_power as _calc_power
+
+                P_f, Q_f = _calc_power(V_final, theta_final, Ybus)
+
+                res_ramos = []
+
+                for l in dados_para_calculo.get('linhas', []):
+                    ki = id_map[l['de']]
+                    mi = id_map[l['para']]
+                    Z  = complex(l['r'], l['x'])
+                    if abs(Z) > 1e-12:
+                        y_s   = 1.0 / Z
+                        Vk    = V_final[ki] * np.exp(1j * theta_final[ki])
+                        Vm    = V_final[mi] * np.exp(1j * theta_final[mi])
+                        b_sh  = complex(0, l.get('bsh', 0.0) / 2)
+                        I_km  = y_s * (Vk - Vm) + b_sh * Vk
+                        I_mk  = y_s * (Vm - Vk) + b_sh * Vm
+                        S_km  = Vk * np.conj(I_km)
+                        S_mk  = Vm * np.conj(I_mk)
+                        perda = S_km + S_mk
+                        res_ramos.append({
+                            "Ramo":            f"L: B{l['de']} → B{l['para']}",
+                            "P_km (pu)":       f"{S_km.real:.4f}",
+                            "Q_km (pu)":       f"{S_km.imag:.4f}",
+                            "P_mk (pu)":       f"{S_mk.real:.4f}",
+                            "Q_mk (pu)":       f"{S_mk.imag:.4f}",
+                            "Perda P (pu)":    f"{perda.real:.4f}",
+                            "Perda Q (pu)":    f"{perda.imag:.4f}",
+                        })
+
+                for t in dados_para_calculo.get('transformadores', []):
+                    ki = id_map[t['de']]
+                    mi = id_map[t['para']]
+                    Z  = complex(t['r'], t['x'])
+                    a  = float(t['a'])
+                    if abs(Z) > 1e-12:
+                        y_km  = 1.0 / Z
+                        Vk    = V_final[ki] * np.exp(1j * theta_final[ki])
+                        Vm    = V_final[mi] * np.exp(1j * theta_final[mi])
+                        # Correntes pelo modelo π do transformador (eq. 1.13 do livro)
+                        I_km  = -a * y_km * (Vm - a * Vk) + a**2 * y_km * Vk - a * y_km * Vm
+                        # Forma direta das equações nodais derivadas da Ybus do trafo:
+                        # I_km = a²·y_km·Vk − a·y_km·Vm  (corrente saindo de k)
+                        I_km  = a**2 * y_km * Vk - a * y_km * Vm
+                        I_mk  = y_km * Vm - a * y_km * Vk
+                        S_km  = Vk * np.conj(I_km)
+                        S_mk  = Vm * np.conj(I_mk)
+                        perda = S_km + S_mk
+                        res_ramos.append({
+                            "Ramo":            f"T (a={a}): B{t['de']} → B{t['para']}",
+                            "P_km (pu)":       f"{S_km.real:.4f}",
+                            "Q_km (pu)":       f"{S_km.imag:.4f}",
+                            "P_mk (pu)":       f"{S_mk.real:.4f}",
+                            "Q_mk (pu)":       f"{S_mk.imag:.4f}",
+                            "Perda P (pu)":    f"{perda.real:.4f}",
+                            "Perda Q (pu)":    f"{perda.imag:.4f}",
+                        })
+
+                if res_ramos:
+                    st.dataframe(pd.DataFrame(res_ramos), hide_index=True)
+                    st.caption("**L** = Linha de transmissão  |  **T** = Transformador  |  **P_km**: fluxo saindo de k  |  **P_mk**: fluxo saindo de m")
+
+                # ── Balanço de potência do sistema ────────────────
+                st.markdown("---")
+                st.markdown("### 🔹 Balanço de Potência do Sistema")
+                P_ger_total  = sum((b.get('p_ger', 0.0) / divisor_potencia) for b in dados_para_calculo['barras'])
+                Q_ger_total  = sum((b.get('q_ger', 0.0) / divisor_potencia) for b in dados_para_calculo['barras'])
+                P_car_total  = sum((b.get('p_carga', 0.0) / divisor_potencia) for b in dados_para_calculo['barras'])
+                Q_car_total  = sum((b.get('q_carga', 0.0) / divisor_potencia) for b in dados_para_calculo['barras'])
+                P_slack      = float(P_f[next(i for i, b in enumerate(backend_buses) if b['type'] == 'Slack')])
+                Q_slack      = float(Q_f[next(i for i, b in enumerate(backend_buses) if b['type'] == 'Slack')])
+                P_perda      = sum(float(r["Perda P (pu)"]) for r in res_ramos) if res_ramos else 0.0
+
+                col_bal1, col_bal2, col_bal3 = st.columns(3)
+                with col_bal1:
+                    st.metric("Geração Total P (pu)",  f"{P_ger_total + P_slack:.4f}")
+                    st.metric("Geração Total Q (pu)",  f"{Q_ger_total + Q_slack:.4f}")
+                with col_bal2:
+                    st.metric("Carga Total P (pu)",    f"{P_car_total:.4f}")
+                    st.metric("Carga Total Q (pu)",    f"{Q_car_total:.4f}")
+                with col_bal3:
+                    st.metric("Perdas P nos Ramos (pu)", f"{P_perda:.4f}")
+                    st.metric("Injeção Slack P (pu)",    f"{P_slack:.4f}")
 
             except Exception as e:
                 st.error(f"❌ Erro durante a simulação: {e}")
