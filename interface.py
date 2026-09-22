@@ -8,11 +8,11 @@ try:
     from ybus import build_ybus
     from newton_raphson import newton_raphson
 except ImportError:
-    st.error("⚠️ Arquivos do motor (ybus.py, newton_raphson.py, etc) não encontrados. Verifique se todos estão na mesma pasta.")
+    st.error("⚠️ Arquivos do motor não encontrados. Verifique se ybus.py, mismatch.py, jacobian.py e newton_raphson.py estão na mesma pasta.")
     st.stop()
 
 # ======================================================
-# FUNÇÕES AUXILIARES DE FORMATAÇÃO
+# FUNÇÕES AUXILIARES
 # ======================================================
 def formatar_vetor_latex(vec, precisao=4):
     elementos = [f"{v:.{precisao}f}" for v in vec]
@@ -25,33 +25,132 @@ def formatar_ybus(ybus):
 # ======================================================
 # CONFIGURAÇÃO DA PÁGINA
 # ======================================================
-st.set_page_config(page_title="Simulador SEP", layout="wide")
+st.set_page_config(page_title="PowerFlow", layout="wide", page_icon="⚡")
+
+# Inicializa navegação
+if "pagina" not in st.session_state:
+    st.session_state.pagina = "home"
 
 # ======================================================
-# BARRA LATERAL
+# CSS GLOBAL — sem sidebar, cards da home, botão voltar
 # ======================================================
-with st.sidebar:
-    st.header("⚙️ Parâmetros do Cálculo")
-    tol_input      = st.number_input("Tolerância (Erro Máximo)", value=1e-6, format="%e", step=1e-7)
-    max_iter_input = st.number_input("Máximo de Iterações", value=20, min_value=1, step=1)
-    st.markdown("---")
-    st.header("📊 Sistema e Unidades")
-    base_mva = st.number_input("Base (MVA)", value=100.0, step=10.0)
-    unidade  = st.selectbox("Unidade de Entrada de Potência", ["MW / MVar", "p.u."])
+st.markdown("""
+<style>
+    .block-container { padding-top: 2rem; padding-bottom: 2rem; }
+    [data-testid="stSidebar"] { display: none !important; }
 
-divisor_potencia = base_mva if unidade == "MW / MVar" else 1.0
+    .pf-main-title {
+        font-size: clamp(40px, 8vw, 72px);
+        font-weight: 900;
+        text-align: center;
+        color: #111;
+        letter-spacing: -2px;
+        margin-bottom: 6px;
+        line-height: 1;
+    }
+    .pf-main-sub {
+        text-align: center;
+        color: #666;
+        font-size: 16px;
+        margin-bottom: 52px;
+    }
+    .pf-card {
+        background: #ffffff;
+        border: 2px solid #e0e0e0;
+        border-radius: 20px;
+        padding: 44px 28px 36px 28px;
+        text-align: center;
+        min-height: 240px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 16px;
+        transition: box-shadow 0.25s, border-color 0.25s, transform 0.2s;
+    }
+    .pf-card:hover {
+        box-shadow: 0 10px 36px rgba(25,118,210,0.16);
+        border-color: #1976d2;
+        transform: translateY(-5px);
+    }
+    .pf-card-icon  { font-size: 56px; line-height: 1; }
+    .pf-card-title { font-size: 22px; font-weight: 800; color: #111; margin: 0; }
+    .pf-card-desc  { font-size: 14px; color: #666; margin: 0; line-height: 1.5; }
+    .pf-divider    { border: none; border-top: 1px solid #e0e0e0; margin: 0 0 2rem 0; }
+</style>
+""", unsafe_allow_html=True)
 
-st.markdown("<h2 style='text-align: center; color: #1976d2;'>Análise de Sistemas de Energia Elétrica</h2>", unsafe_allow_html=True)
+# ======================================================
+# HOME
+# ======================================================
+if st.session_state.pagina == "home":
+    st.markdown('<div class="pf-main-title">Power Flow</div>', unsafe_allow_html=True)
+    st.markdown('<div class="pf-main-sub">Plataforma educacional para ensino de fluxo de potência em sistemas elétricos de potência</div>', unsafe_allow_html=True)
+
+    col1, col2, col3 = st.columns(3, gap="large")
+
+    with col1:
+        st.markdown("""
+        <div class="pf-card">
+            <div class="pf-card-icon">🖥️</div>
+            <div class="pf-card-title">Simulação FC</div>
+            <div class="pf-card-desc">Monte a topologia da rede, configure os parâmetros e execute o fluxo de potência pelo Método de Newton-Raphson.</div>
+        </div>
+        """, unsafe_allow_html=True)
+        st.markdown("<br>", unsafe_allow_html=True)
+        if st.button("Acessar Simulação", key="btn_sim", use_container_width=True, type="primary"):
+            st.session_state.pagina = "simulacao"
+            st.rerun()
+
+    with col2:
+        st.markdown("""
+        <div class="pf-card">
+            <div class="pf-card-icon">🎓</div>
+            <div class="pf-card-title">Tutorial da Plataforma</div>
+            <div class="pf-card-desc">Aprenda a usar a plataforma passo a passo: barras, linhas, transformadores e interpretação dos resultados.</div>
+        </div>
+        """, unsafe_allow_html=True)
+        st.markdown("<br>", unsafe_allow_html=True)
+        if st.button("Acessar Tutorial", key="btn_tut", use_container_width=True):
+            st.session_state.pagina = "tutorial"
+            st.rerun()
+
+    with col3:
+        st.markdown("""
+        <div class="pf-card">
+            <div class="pf-card-icon">📖</div>
+            <div class="pf-card-title">Teoria SEP</div>
+            <div class="pf-card-desc">Fundamentos teóricos: modelo π, matriz Ybus, classificação de barras, Jacobiana e o Método de Newton-Raphson.</div>
+        </div>
+        """, unsafe_allow_html=True)
+        st.markdown("<br>", unsafe_allow_html=True)
+        if st.button("Acessar Teoria", key="btn_teo", use_container_width=True):
+            st.session_state.pagina = "teoria"
+            st.rerun()
+
+    st.stop()
 
 # ======================================================
-# ABAS PRINCIPAIS
+# BOTÃO VOLTAR — comum a todas as subpáginas
 # ======================================================
-tab_teoria, tab_simulador = st.tabs(["📚 Fundamentação Teórica", "⚡ Simulador Prático"])
+if st.button("← Voltar ao início"):
+    st.session_state.pagina = "home"
+    st.rerun()
+st.markdown('<hr class="pf-divider">', unsafe_allow_html=True)
 
 # ======================================================
-# ABA 1 — FUNDAMENTAÇÃO TEÓRICA
+# PÁGINA: TUTORIAL
 # ======================================================
-with tab_teoria:
+if st.session_state.pagina == "tutorial":
+    st.markdown("## 🎓 Tutorial da Plataforma PowerFlow")
+    st.info("Esta seção está em construção. Em breve trará guias passo a passo com exemplos resolvidos.", icon="🚧")
+    st.stop()
+
+# ======================================================
+# PÁGINA: TEORIA SEP
+# ======================================================
+if st.session_state.pagina == "teoria":
+    st.markdown("## 📖 Teoria dos Sistemas Elétricos de Potência")
     st.markdown("""
     ### 1. INTRODUÇÃO
     O crescimento dos sistemas elétricos de potência tornou indispensável o desenvolvimento de ferramentas matemáticas capazes de analisar o comportamento operacional das redes elétricas em regime permanente. Dentre essas ferramentas, o estudo do fluxo de potência possui papel central, permitindo determinar as magnitudes e ângulos das tensões nas barras do sistema, bem como os fluxos de potência ativa e reativa nas linhas de transmissão.
@@ -78,12 +177,10 @@ with tab_teoria:
     O transformador em-fase com relação de transformação $1:a$ (onde $a = V_k/V_m$) e admitância série $y_{km} = 1/(R+jX)$ é representado pelo seguinte circuito equivalente $\\pi$:
     """)
     st.latex(r"A = a \cdot y_{km} \quad B = a(a-1) \cdot y_{km} \quad C = (1-a) \cdot y_{km}")
-    st.markdown("""
-    As contribuições na matriz $Y_{bus}$ são:
-    """)
+    st.markdown("As contribuições na matriz $Y_{bus}$ são:")
     st.latex(r"Y_{kk} \mathrel{+}= a^2 \cdot y_{km} \qquad Y_{mm} \mathrel{+}= y_{km} \qquad Y_{km} = Y_{mk} = -a \cdot y_{km}")
     st.markdown("""
-    Para $a = 1$ (tap nominal), o modelo reduz-se à admitância série simples, equivalente a uma linha sem shunt. Para $a \\neq 1$, os shunts $B$ e $C$ têm sinais opostos, modelando o efeito do tap sobre as tensões terminais.
+    Para $a = 1$ (tap nominal), o modelo reduz-se à admitância série simples. Para $a \\neq 1$, os shunts $B$ e $C$ têm sinais opostos, modelando o efeito do tap sobre as tensões terminais.
 
     ### 4. CONSTRUÇÃO DA MATRIZ DE ADMITÂNCIAS NODAIS
     A representação nodal do sistema elétrico é realizada através da matriz $Y_{bus}$. A relação fundamental da análise nodal é expressa por $I_{bus} = Y_{bus}V_{bus}$.
@@ -132,11 +229,28 @@ with tab_teoria:
     ### 9. CONCLUSÃO
     A formulação matemática baseada na matriz Jacobiana permite resolver iterativamente as equações não lineares do sistema elétrico, fornecendo resultados precisos para tensões, ângulos e fluxos de potência, destacando-se pela sua elevada velocidade de convergência e robustez numérica em sistemas de grande porte.
     """)
+    st.stop()
 
 # ======================================================
-# ABA 2 — SIMULADOR PRÁTICO
+# PÁGINA: SIMULAÇÃO FC
 # ======================================================
-with tab_simulador:
+if st.session_state.pagina == "simulacao":
+    st.markdown("## 🖥️ Simulação de Fluxo de Carga")
+
+    # Parâmetros do cálculo — dentro da página de simulação, em expander
+    with st.expander("⚙️ Parâmetros do Cálculo e Base do Sistema", expanded=False):
+        col_p1, col_p2, col_p3, col_p4 = st.columns(4)
+        with col_p1:
+            tol_input = st.number_input("Tolerância (Erro Máximo)", value=1e-6, format="%e", step=1e-7)
+        with col_p2:
+            max_iter_input = st.number_input("Máximo de Iterações", value=20, min_value=1, step=1)
+        with col_p3:
+            base_mva = st.number_input("Base (MVA)", value=100.0, step=10.0)
+        with col_p4:
+            unidade = st.selectbox("Unidade de Potência", ["MW / MVar", "p.u."])
+
+    divisor_potencia = base_mva if unidade == "MW / MVar" else 1.0
+
     modo_entrada = st.radio(
         "Escolha a interface de modelagem do sistema:",
         ["Modo Tabela (Entrada Analítica)", "Modo Circuito (Diagrama Unifilar)"],
@@ -177,7 +291,6 @@ with tab_simulador:
                 linhas_dict["Bsh_linha (pu)"].append(float(l.get('bsh', 0.0)))
             df_linhas_default = pd.DataFrame(linhas_dict)
 
-            # Transformadores vindos do canvas
             trafos_dict = {"De (lado tap)": [], "Para": [], "R (pu)": [], "X (pu)": [], "Tap a (pu)": []}
             for t in canvas_data.get('transformadores', []):
                 trafos_dict["De (lado tap)"].append(t['de'])
@@ -234,8 +347,8 @@ with tab_simulador:
         with col_btn2:
             if st.button("▶ EXECUTAR FLUXO DE POTÊNCIA", use_container_width=True, type="primary"):
                 df_b = df_barras_editado.copy().fillna(0.0)
-                df_b["V (pu)"]  = df_b["V (pu)"].replace(0.0, 1.0)
-                df_b["Tipo"]    = df_b["Tipo"].replace(0.0, "PQ")
+                df_b["V (pu)"] = df_b["V (pu)"].replace(0.0, 1.0)
+                df_b["Tipo"]   = df_b["Tipo"].replace(0.0, "PQ")
                 df_l = df_linhas_editado.copy().fillna(0.0)
                 df_t = df_trafos_editado.copy().fillna(0.0)
                 df_t["Tap a (pu)"] = df_t["Tap a (pu)"].replace(0.0, 1.0)
@@ -243,37 +356,30 @@ with tab_simulador:
                 barras_list = []
                 for _, row in df_b.iterrows():
                     barras_list.append({
-                        "id":       int(row["Barra"]),
-                        "tipo":     str(row["Tipo"]).strip(),
-                        "v":        float(row["V (pu)"]),
-                        "theta":    float(row["θ (graus)"]),
-                        "p_ger":    float(row["Pg"]),
-                        "q_ger":    float(row["Qg"]),
-                        "p_carga":  float(row["Pc"]),
-                        "q_carga":  float(row["Qc"]),
-                        "bsh_bus":  float(row["Bsh (pu)"])
+                        "id":      int(row["Barra"]),
+                        "tipo":    str(row["Tipo"]).strip(),
+                        "v":       float(row["V (pu)"]),
+                        "theta":   float(row["θ (graus)"]),
+                        "p_ger":   float(row["Pg"]),
+                        "q_ger":   float(row["Qg"]),
+                        "p_carga": float(row["Pc"]),
+                        "q_carga": float(row["Qc"]),
+                        "bsh_bus": float(row["Bsh (pu)"])
                     })
-
                 linhas_list = []
                 for _, row in df_l.iterrows():
                     linhas_list.append({
-                        "de":   int(row["De"]),
-                        "para": int(row["Para"]),
-                        "r":    float(row["R (pu)"]),
-                        "x":    float(row["X (pu)"]),
-                        "bsh":  float(row["Bsh_linha (pu)"])
+                        "de": int(row["De"]), "para": int(row["Para"]),
+                        "r": float(row["R (pu)"]), "x": float(row["X (pu)"]),
+                        "bsh": float(row["Bsh_linha (pu)"])
                     })
-
                 trafos_list = []
                 for _, row in df_t.iterrows():
                     trafos_list.append({
-                        "de":   int(row["De (lado tap)"]),
-                        "para": int(row["Para"]),
-                        "r":    float(row["R (pu)"]),
-                        "x":    float(row["X (pu)"]),
-                        "a":    float(row["Tap a (pu)"])
+                        "de": int(row["De (lado tap)"]), "para": int(row["Para"]),
+                        "r": float(row["R (pu)"]), "x": float(row["X (pu)"]),
+                        "a": float(row["Tap a (pu)"])
                     })
-
                 dados_para_calculo = {"barras": barras_list, "linhas": linhas_list, "transformadores": trafos_list}
 
     # ============================================================
@@ -340,7 +446,6 @@ with tab_simulador:
                     window.parent.postMessage({ isStreamlitMessage: true, type: "streamlit:setFrameHeight", height: 650 }, "*");
                 }, 500);
 
-                // ── Estado global ──────────────────────────────────────────
                 let barras = [], linhas = [], transformadores = [];
                 let geradores = [], cargas = [];
                 let idCounter = 1;
@@ -352,14 +457,12 @@ with tab_simulador:
                 const panel = document.getElementById("properties-panel");
                 panel.addEventListener('mousedown', e => e.stopPropagation());
 
-                // ── Inicialização com barra Slack ──────────────────────────
                 function initSlack() {
                     const b = { id: idCounter++, type: 'slack', x: 150, y: 300, v: 1.06, theta: 0, bsh_bus: 0, rotState: 0, el: null };
                     barras.push(b); renderBarra(b);
                 }
                 initSlack();
 
-                // ── Shunt visual na barra ──────────────────────────────────
                 function getBusShuntSVG(val) {
                     if (!val || val === 0) return "";
                     const isCap = val > 0;
@@ -378,7 +481,6 @@ with tab_simulador:
                     </svg>`;
                 }
 
-                // ── Render de barra ────────────────────────────────────────
                 function renderBarra(b) {
                     if (b.el) b.el.remove();
                     const el = document.createElement("div");
@@ -414,7 +516,6 @@ with tab_simulador:
                     barras.push(b); renderBarra(b); selectElement(b, 'barra');
                 }
 
-                // ── Gerador / Carga ────────────────────────────────────────
                 function attachComponent(tipo) {
                     if (selectedType !== 'barra') { alert("Selecione uma barra primeiro!"); return; }
                     const barra = selectedElement;
@@ -464,16 +565,13 @@ with tab_simulador:
                     item.elWire.setAttribute("d", `M ${barra.x} ${barra.y} L ${cx} ${cy}`);
                 }
 
-                // ── Modo de conexão (linha ou trafo) ───────────────────────
                 function toggleConnectMode(kind) {
                     const sameKind = connectMode && connectKind === kind;
-                    // Desativa modo atual
                     connectMode = false; connectKind = null; connectStartBarra = null;
                     document.getElementById("btnConnect").style.background = "";
                     document.getElementById("btnConnect").innerText = "🔗 Conectar Linha";
                     document.getElementById("btnTrafo").style.background = "";
                     document.getElementById("btnTrafo").innerText = "🔀 Conectar Trafo";
-
                     if (!sameKind) {
                         connectMode = true; connectKind = kind;
                         if (kind === 'linha') {
@@ -502,15 +600,12 @@ with tab_simulador:
                                     linhas.push(l); renderLinha(l);
                                 }
                             } else if (connectKind === 'trafo') {
-                                // Verifica se já existe trafo entre essas barras
                                 const existe = transformadores.find(t =>
                                     (t.bk===barra.id && t.bm===connectStartBarra.id) ||
                                     (t.bk===connectStartBarra.id && t.bm===barra.id));
                                 if (!existe) {
-                                    // connectStartBarra = lado do tap (barra k)
                                     const t = { id: idCounter++, bk: connectStartBarra.id, bm: barra.id,
-                                                r: 0.0, x: 0.1, a: 1.0,
-                                                elPath: null, elLabel: null, elSymbol: null };
+                                                r: 0.0, x: 0.1, a: 1.0, elPath: null, elLabel: null, elSymbol: null };
                                     transformadores.push(t); renderTrafo(t);
                                 }
                             }
@@ -519,7 +614,6 @@ with tab_simulador:
                     }
                 }
 
-                // ── Render de linha ────────────────────────────────────────
                 function renderLinha(l) {
                     const b1 = barras.find(b => b.id === l.b1);
                     const b2 = barras.find(b => b.id === l.b2);
@@ -583,7 +677,6 @@ with tab_simulador:
                         l.elPath.classList.remove("selected");
                 }
 
-                // ── Render de transformador ────────────────────────────────
                 function renderTrafo(t) {
                     const bk = barras.find(b => b.id === t.bk);
                     const bm = barras.find(b => b.id === t.bm);
@@ -602,30 +695,23 @@ with tab_simulador:
                     const midX = (bk.x+bm.x)/2, midY = (bk.y+bm.y)/2;
                     const dx = bm.x-bk.x, dy = bm.y-bk.y;
                     const angle = Math.atan2(dy,dx)*180/Math.PI;
-
-                    // Símbolo visual do transformador: dois círculos concêntricos no centro
                     t.elSymbol.innerHTML = '';
                     t.elSymbol.setAttribute("transform", `translate(${midX},${midY}) rotate(${angle})`);
                     const bgT = document.createElementNS("http://www.w3.org/2000/svg","rect");
                     bgT.setAttribute("x","-35"); bgT.setAttribute("y","-20"); bgT.setAttribute("width","70"); bgT.setAttribute("height","40"); bgT.setAttribute("fill","#cfcfcf");
                     t.elSymbol.appendChild(bgT);
-                    // Círculo lado k (tap)
                     const ck = document.createElementNS("http://www.w3.org/2000/svg","circle");
                     ck.setAttribute("cx","-10"); ck.setAttribute("cy","0"); ck.setAttribute("r","12");
                     ck.setAttribute("fill","none"); ck.setAttribute("stroke","#6a1b9a"); ck.setAttribute("stroke-width","2.5");
                     t.elSymbol.appendChild(ck);
-                    // Círculo lado m
                     const cm = document.createElementNS("http://www.w3.org/2000/svg","circle");
                     cm.setAttribute("cx","10"); cm.setAttribute("cy","0"); cm.setAttribute("r","12");
                     cm.setAttribute("fill","none"); cm.setAttribute("stroke","#6a1b9a"); cm.setAttribute("stroke-width","2.5");
                     t.elSymbol.appendChild(cm);
-                    // Indicador de tap (triângulo pequeno no lado k)
                     const tap = document.createElementNS("http://www.w3.org/2000/svg","polygon");
                     tap.setAttribute("points","-28,-6 -22,0 -28,6");
                     tap.setAttribute("fill","#6a1b9a");
                     t.elSymbol.appendChild(tap);
-
-                    // Rótulo com tap
                     t.elLabel.innerHTML = `🔀 T(a=${t.a}) B${t.bk}→B${t.bm}`;
                     t.elLabel.style.color = "#6a1b9a";
                     t.elLabel.style.left = midX+"px"; t.elLabel.style.top = (midY-44)+"px";
@@ -636,7 +722,6 @@ with tab_simulador:
                         t.elPath.classList.remove("selected");
                 }
 
-                // ── updateAllWires ─────────────────────────────────────────
                 function updateAllWires() {
                     linhas.forEach(renderLinha);
                     transformadores.forEach(renderTrafo);
@@ -644,7 +729,6 @@ with tab_simulador:
                     cargas.forEach(c => positionAttached(c, barras.find(b => b.id===c.barraId), 'carga'));
                 }
 
-                // ── Arraste ────────────────────────────────────────────────
                 function makeDraggable(el, item, type) {
                     let drag = false, sx, sy;
                     el.addEventListener('mousedown', e => {
@@ -667,7 +751,6 @@ with tab_simulador:
 
                 ws.addEventListener('mousedown', () => { if (!connectMode) selectElement(null, null); });
 
-                // ── Painel de propriedades ─────────────────────────────────
                 function selectElement(item, type) {
                     selectedElement = item; selectedType = type;
                     document.querySelectorAll(".component.selected").forEach(el => el.classList.remove("selected"));
@@ -743,7 +826,6 @@ with tab_simulador:
                     renderBarra(selectedElement); selectElement(selectedElement, 'barra');
                 }
 
-                // ── Exclusão ───────────────────────────────────────────────
                 function deleteSelected() {
                     if (!selectedElement) return;
                     if (selectedType === 'barra') {
@@ -776,19 +858,14 @@ with tab_simulador:
                     selectElement(null, null); updateAllWires();
                 }
 
-                // ── Exportar para Python ───────────────────────────────────
                 function exportarParaPython() {
-                    // Validação: exatamente uma barra Slack
                     const slacks = barras.filter(b => b.type === 'slack');
                     if (slacks.length === 0) { alert("Erro: nenhuma barra Slack encontrada."); return; }
-
-                    // Validação: barras PV precisam de gerador
                     const pvSemGerador = barras.filter(b => b.type==='PV' && !geradores.find(g => g.barraId===b.id));
                     if (pvSemGerador.length > 0) {
                         alert("Erro: barra(s) PV sem gerador associado: " + pvSemGerador.map(b=>`B${b.id}`).join(", "));
                         return;
                     }
-
                     const sistema = {
                         barras: barras.map(b => {
                             const g = geradores.find(x => x.barraId===b.id);
@@ -826,21 +903,18 @@ with tab_simulador:
             st.session_state['sync_canvas_data'] = dados_canvas_bruto
 
     # ============================================================
-    # PROCESSAMENTO DO MOTOR — COMUM A AMBOS OS MODOS
+    # PROCESSAMENTO DO MOTOR
     # ============================================================
     if dados_para_calculo is not None:
         st.markdown("---")
 
-        # ── Validações antes de chamar o motor ──────────────────
         erros_validacao = []
-
         tipos_barra = [str(b['tipo']).strip() for b in dados_para_calculo.get('barras', [])]
         n_slack = sum(1 for t in tipos_barra if t.lower() == 'slack')
         if n_slack == 0:
             erros_validacao.append("❌ Nenhuma barra Slack encontrada. O sistema requer exatamente uma barra de referência.")
         elif n_slack > 1:
             erros_validacao.append(f"❌ {n_slack} barras Slack detectadas. Apenas uma é permitida.")
-
         if len(dados_para_calculo.get('linhas', [])) == 0 and len(dados_para_calculo.get('transformadores', [])) == 0:
             erros_validacao.append("❌ O sistema necessita de pelo menos uma linha ou transformador conectando os barramentos.")
 
@@ -850,52 +924,34 @@ with tab_simulador:
             st.stop()
 
         with st.spinner("Solucionando pelo Método de Newton-Raphson..."):
-            # ── Mapeamento de IDs para índices internos 0..n-1 ──
-            # A ordem da lista define os índices internos.
-            # id_map: ID original da barra → índice interno (1-based para exibição)
-            id_map       = {b['id']: idx for idx, b in enumerate(dados_para_calculo['barras'])}
+            id_map       = {b['id']: idx   for idx, b in enumerate(dados_para_calculo['barras'])}
             id_map_label = {b['id']: idx+1 for idx, b in enumerate(dados_para_calculo['barras'])}
-
             tipo_map = {'slack': 'Slack', 'pv': 'PV', 'pq': 'PQ'}
 
             backend_buses = []
             for b in dados_para_calculo['barras']:
-                tipo_real      = tipo_map[str(b['tipo']).lower().strip()]
-                p_liq_pu       = (b['p_ger'] - b['p_carga']) / divisor_potencia
-                # Q de barras PV é incógnita — zerado aqui (motor também zera,
-                # mas zeramos na fonte para clareza)
-                if tipo_real == 'PV':
-                    q_liq_pu = 0.0
-                else:
-                    q_liq_pu = (b['q_ger'] - b['q_carga']) / divisor_potencia
-
+                tipo_real = tipo_map[str(b['tipo']).lower().strip()]
+                p_liq_pu  = (b['p_ger'] - b['p_carga']) / divisor_potencia
+                q_liq_pu  = 0.0 if tipo_real == 'PV' else (b['q_ger'] - b['q_carga']) / divisor_potencia
                 backend_buses.append({
-                    "type":  tipo_real,
-                    "V":     float(b.get('v', 1.0)),
+                    "type": tipo_real, "V": float(b.get('v', 1.0)),
                     "theta": float(b.get('theta', 0.0)),
-                    "P":     float(p_liq_pu),
-                    "Q":     float(q_liq_pu),
+                    "P": float(p_liq_pu), "Q": float(q_liq_pu),
                     "Bsh_bus": float(b.get('bsh_bus', 0.0))
                 })
 
             backend_lines = []
             for l in dados_para_calculo.get('linhas', []):
                 backend_lines.append({
-                    "from": id_map[l['de']]  + 1,
-                    "to":   id_map[l['para']]+ 1,
-                    "R":    float(l['r']),
-                    "X":    float(l['x']),
-                    "Bsh":  float(l.get('bsh', 0.0))
+                    "from": id_map[l['de']]+1, "to": id_map[l['para']]+1,
+                    "R": float(l['r']), "X": float(l['x']), "Bsh": float(l.get('bsh', 0.0))
                 })
 
             backend_trafos = []
             for t in dados_para_calculo.get('transformadores', []):
                 backend_trafos.append({
-                    "from": id_map[t['de']]  + 1,
-                    "to":   id_map[t['para']]+ 1,
-                    "R":    float(t['r']),
-                    "X":    float(t['x']),
-                    "a":    float(t['a'])
+                    "from": id_map[t['de']]+1, "to": id_map[t['para']]+1,
+                    "R": float(t['r']), "X": float(t['x']), "a": float(t['a'])
                 })
 
             try:
@@ -912,29 +968,23 @@ with tab_simulador:
                 else:
                     st.warning(f"⚠️ Limite de {int(max_iter_input)} iterações atingido sem convergência completa. Os resultados abaixo são aproximados.")
 
-                # ── Tabela de resultados ─────────────────────────
                 st.markdown("#### Resultados Finais nas Barras")
                 res_barras = []
-                for b_orig, b_back in zip(dados_para_calculo['barras'], backend_buses):
+                for b_orig in dados_para_calculo['barras']:
                     idx = id_map[b_orig['id']]
                     res_barras.append({
-                        "Barra":         id_map_label[b_orig['id']],
-                        "ID Original":   b_orig['id'],
-                        "Tipo":          str(b_orig['tipo']).upper(),
+                        "Barra": id_map_label[b_orig['id']],
+                        "ID Original": b_orig['id'],
+                        "Tipo": str(b_orig['tipo']).upper(),
                         "Módulo |V| (pu)": f"{V_final[idx]:.4f}",
-                        "Ângulo θ (°)":  f"{np.degrees(theta_final[idx]):.4f}",
+                        "Ângulo θ (°)": f"{np.degrees(theta_final[idx]):.4f}",
                     })
                 st.dataframe(pd.DataFrame(res_barras), hide_index=True)
-
                 st.markdown("---")
 
-                # ══════════════════════════════════════════════════
-                # MEMÓRIA DE CÁLCULO EDUCACIONAL
-                # ══════════════════════════════════════════════════
                 st.markdown("<h2 style='text-align:center;color:#2e7d32;'>📚 Memória de Cálculo Analítica</h2>", unsafe_allow_html=True)
                 st.caption(f"*(Processamento interno em p.u., S_base = {base_mva} MVA)*")
 
-                # Ybus
                 st.markdown("### 🔹 Matriz de Admitância Nodal ($Y_{bus}$)")
                 rotulos_y = [f"Barra {id_map_label[b['id']]}" for b in dados_para_calculo['barras']]
                 df_ybus = formatar_ybus(Ybus)
@@ -942,7 +992,6 @@ with tab_simulador:
                 df_ybus.index   = rotulos_y
                 st.dataframe(df_ybus)
 
-                # Estado inicial e potências especificadas
                 st.markdown("### 🔹 Estado Inicial e Potências Injetadas Líquidas (p.u.)")
                 col_ini1, col_ini2 = st.columns(2)
                 with col_ini1:
@@ -954,7 +1003,6 @@ with tab_simulador:
                     st.latex(r"P^{esp} = " + formatar_vetor_latex(P_spec))
                     st.latex(r"Q^{esp} = " + formatar_vetor_latex(Q_spec))
 
-                # Iteração 0
                 st.markdown("### 🔹 Iteração $\\nu = 0$")
                 dados_iter0 = log_iteracoes[0]
                 col_p0, col_q0 = st.columns(2)
@@ -977,7 +1025,6 @@ with tab_simulador:
                 else:
                     st.warning("⚠️ Critério não atingido. O algoritmo avança para o processo iterativo.")
                     st.markdown("---")
-
                     st.markdown("### 🔹 Processo Iterativo")
                     it_validas = [s for s in log_iteracoes if 'J' in s]
                     if it_validas:
@@ -1007,7 +1054,6 @@ with tab_simulador:
                                 st.dataframe(pd.DataFrame(dados_iter['L']).map(lambda x: f"{x:.4f}"))
 
                         st.markdown(f"#### 2. Jacobiana Completa $J^{{({nu})}}$")
-                        # Rótulos usando IDs originais das barras
                         barras_pvpq = [dados_para_calculo['barras'][i]['id'] for i in pvpq]
                         barras_pq   = [dados_para_calculo['barras'][i]['id'] for i in pq_index]
                         rotulos_j   = ([f"Δθ(B{bid})" for bid in barras_pvpq] +
@@ -1033,102 +1079,81 @@ with tab_simulador:
                             st.latex(r"\theta^{(" + str(nu+1) + r")} = " + formatar_vetor_latex(dados_iter['theta_prox']))
                             st.latex(r"V^{(" + str(nu+1) + r")} = "      + formatar_vetor_latex(dados_iter['V_prox']))
 
-                # ── Tabela de convergência por iteração ──────────
                 st.markdown("---")
                 st.markdown("### 🔹 Histórico de Convergência")
                 hist_conv = []
                 for s in log_iteracoes:
                     hist_conv.append({
-                        "Iteração ν":      s['nu'],
-                        "Erro máximo":     f"{s['erro']:.4e}",
-                        "Convergiu?":      "✅ Sim" if s['convergiu'] else "❌ Não",
+                        "Iteração ν": s['nu'],
+                        "Erro máximo": f"{s['erro']:.4e}",
+                        "Convergiu?": "✅ Sim" if s['convergiu'] else "❌ Não",
                     })
                 st.dataframe(pd.DataFrame(hist_conv), hide_index=True)
 
-                # ── Fluxos nas linhas ──────────────────────────────
                 st.markdown("---")
                 st.markdown("### 🔹 Fluxos de Potência nos Ramos")
-
                 from mismatch import calc_power as _calc_power
-
                 P_f, Q_f = _calc_power(V_final, theta_final, Ybus)
-
                 res_ramos = []
 
                 for l in dados_para_calculo.get('linhas', []):
-                    ki = id_map[l['de']]
-                    mi = id_map[l['para']]
-                    Z  = complex(l['r'], l['x'])
+                    ki = id_map[l['de']]; mi = id_map[l['para']]
+                    Z = complex(l['r'], l['x'])
                     if abs(Z) > 1e-12:
-                        y_s   = 1.0 / Z
-                        Vk    = V_final[ki] * np.exp(1j * theta_final[ki])
-                        Vm    = V_final[mi] * np.exp(1j * theta_final[mi])
-                        b_sh  = complex(0, l.get('bsh', 0.0) / 2)
-                        I_km  = y_s * (Vk - Vm) + b_sh * Vk
-                        I_mk  = y_s * (Vm - Vk) + b_sh * Vm
-                        S_km  = Vk * np.conj(I_km)
-                        S_mk  = Vm * np.conj(I_mk)
+                        y_s  = 1.0 / Z
+                        Vk   = V_final[ki] * np.exp(1j * theta_final[ki])
+                        Vm   = V_final[mi] * np.exp(1j * theta_final[mi])
+                        b_sh = complex(0, l.get('bsh', 0.0) / 2)
+                        I_km = y_s * (Vk - Vm) + b_sh * Vk
+                        I_mk = y_s * (Vm - Vk) + b_sh * Vm
+                        S_km = Vk * np.conj(I_km); S_mk = Vm * np.conj(I_mk)
                         perda = S_km + S_mk
                         res_ramos.append({
-                            "Ramo":            f"L: B{l['de']} → B{l['para']}",
-                            "P_km (pu)":       f"{S_km.real:.4f}",
-                            "Q_km (pu)":       f"{S_km.imag:.4f}",
-                            "P_mk (pu)":       f"{S_mk.real:.4f}",
-                            "Q_mk (pu)":       f"{S_mk.imag:.4f}",
-                            "Perda P (pu)":    f"{perda.real:.4f}",
-                            "Perda Q (pu)":    f"{perda.imag:.4f}",
+                            "Ramo": f"L: B{l['de']} → B{l['para']}",
+                            "P_km (pu)": f"{S_km.real:.4f}", "Q_km (pu)": f"{S_km.imag:.4f}",
+                            "P_mk (pu)": f"{S_mk.real:.4f}", "Q_mk (pu)": f"{S_mk.imag:.4f}",
+                            "Perda P (pu)": f"{perda.real:.4f}", "Perda Q (pu)": f"{perda.imag:.4f}",
                         })
 
                 for t in dados_para_calculo.get('transformadores', []):
-                    ki = id_map[t['de']]
-                    mi = id_map[t['para']]
-                    Z  = complex(t['r'], t['x'])
-                    a  = float(t['a'])
+                    ki = id_map[t['de']]; mi = id_map[t['para']]
+                    Z = complex(t['r'], t['x']); a = float(t['a'])
                     if abs(Z) > 1e-12:
-                        y_km  = 1.0 / Z
-                        Vk    = V_final[ki] * np.exp(1j * theta_final[ki])
-                        Vm    = V_final[mi] * np.exp(1j * theta_final[mi])
-                        # Correntes pelo modelo π do transformador (eq. 1.13 do livro)
-                        I_km  = -a * y_km * (Vm - a * Vk) + a**2 * y_km * Vk - a * y_km * Vm
-                        # Forma direta das equações nodais derivadas da Ybus do trafo:
-                        # I_km = a²·y_km·Vk − a·y_km·Vm  (corrente saindo de k)
-                        I_km  = a**2 * y_km * Vk - a * y_km * Vm
-                        I_mk  = y_km * Vm - a * y_km * Vk
-                        S_km  = Vk * np.conj(I_km)
-                        S_mk  = Vm * np.conj(I_mk)
+                        y_km = 1.0 / Z
+                        Vk   = V_final[ki] * np.exp(1j * theta_final[ki])
+                        Vm   = V_final[mi] * np.exp(1j * theta_final[mi])
+                        I_km = a**2 * y_km * Vk - a * y_km * Vm
+                        I_mk = y_km * Vm - a * y_km * Vk
+                        S_km = Vk * np.conj(I_km); S_mk = Vm * np.conj(I_mk)
                         perda = S_km + S_mk
                         res_ramos.append({
-                            "Ramo":            f"T (a={a}): B{t['de']} → B{t['para']}",
-                            "P_km (pu)":       f"{S_km.real:.4f}",
-                            "Q_km (pu)":       f"{S_km.imag:.4f}",
-                            "P_mk (pu)":       f"{S_mk.real:.4f}",
-                            "Q_mk (pu)":       f"{S_mk.imag:.4f}",
-                            "Perda P (pu)":    f"{perda.real:.4f}",
-                            "Perda Q (pu)":    f"{perda.imag:.4f}",
+                            "Ramo": f"T (a={a}): B{t['de']} → B{t['para']}",
+                            "P_km (pu)": f"{S_km.real:.4f}", "Q_km (pu)": f"{S_km.imag:.4f}",
+                            "P_mk (pu)": f"{S_mk.real:.4f}", "Q_mk (pu)": f"{S_mk.imag:.4f}",
+                            "Perda P (pu)": f"{perda.real:.4f}", "Perda Q (pu)": f"{perda.imag:.4f}",
                         })
 
                 if res_ramos:
                     st.dataframe(pd.DataFrame(res_ramos), hide_index=True)
-                    st.caption("**L** = Linha de transmissão  |  **T** = Transformador  |  **P_km**: fluxo saindo de k  |  **P_mk**: fluxo saindo de m")
+                    st.caption("**L** = Linha  |  **T** = Transformador  |  **P_km**: fluxo saindo de k  |  **P_mk**: fluxo saindo de m")
 
-                # ── Balanço de potência do sistema ────────────────
                 st.markdown("---")
                 st.markdown("### 🔹 Balanço de Potência do Sistema")
-                P_ger_total  = sum((b.get('p_ger', 0.0) / divisor_potencia) for b in dados_para_calculo['barras'])
-                Q_ger_total  = sum((b.get('q_ger', 0.0) / divisor_potencia) for b in dados_para_calculo['barras'])
-                P_car_total  = sum((b.get('p_carga', 0.0) / divisor_potencia) for b in dados_para_calculo['barras'])
-                Q_car_total  = sum((b.get('q_carga', 0.0) / divisor_potencia) for b in dados_para_calculo['barras'])
-                P_slack      = float(P_f[next(i for i, b in enumerate(backend_buses) if b['type'] == 'Slack')])
-                Q_slack      = float(Q_f[next(i for i, b in enumerate(backend_buses) if b['type'] == 'Slack')])
-                P_perda      = sum(float(r["Perda P (pu)"]) for r in res_ramos) if res_ramos else 0.0
+                P_ger_total = sum((b.get('p_ger', 0.0) / divisor_potencia) for b in dados_para_calculo['barras'])
+                Q_ger_total = sum((b.get('q_ger', 0.0) / divisor_potencia) for b in dados_para_calculo['barras'])
+                P_car_total = sum((b.get('p_carga', 0.0) / divisor_potencia) for b in dados_para_calculo['barras'])
+                Q_car_total = sum((b.get('q_carga', 0.0) / divisor_potencia) for b in dados_para_calculo['barras'])
+                P_slack     = float(P_f[next(i for i, b in enumerate(backend_buses) if b['type'] == 'Slack')])
+                Q_slack     = float(Q_f[next(i for i, b in enumerate(backend_buses) if b['type'] == 'Slack')])
+                P_perda     = sum(float(r["Perda P (pu)"]) for r in res_ramos) if res_ramos else 0.0
 
                 col_bal1, col_bal2, col_bal3 = st.columns(3)
                 with col_bal1:
-                    st.metric("Geração Total P (pu)",  f"{P_ger_total + P_slack:.4f}")
-                    st.metric("Geração Total Q (pu)",  f"{Q_ger_total + Q_slack:.4f}")
+                    st.metric("Geração Total P (pu)", f"{P_ger_total + P_slack:.4f}")
+                    st.metric("Geração Total Q (pu)", f"{Q_ger_total + Q_slack:.4f}")
                 with col_bal2:
-                    st.metric("Carga Total P (pu)",    f"{P_car_total:.4f}")
-                    st.metric("Carga Total Q (pu)",    f"{Q_car_total:.4f}")
+                    st.metric("Carga Total P (pu)",   f"{P_car_total:.4f}")
+                    st.metric("Carga Total Q (pu)",   f"{Q_car_total:.4f}")
                 with col_bal3:
                     st.metric("Perdas P nos Ramos (pu)", f"{P_perda:.4f}")
                     st.metric("Injeção Slack P (pu)",    f"{P_slack:.4f}")
