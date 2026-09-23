@@ -147,88 +147,347 @@ if st.session_state.pagina == "tutorial":
     st.stop()
 
 # ======================================================
-# PÁGINA: TEORIA SEP
+# PÁGINA: TEORIA SEP — navegação por cards
 # ======================================================
 if st.session_state.pagina == "teoria":
+
+    # CSS extra para os cards de tópico
+    st.markdown("""
+    <style>
+        .teo-card {
+            background: #fff;
+            border: 2px solid #e0e0e0;
+            border-radius: 14px;
+            padding: 22px 12px 18px 12px;
+            text-align: center;
+            cursor: pointer;
+            transition: box-shadow 0.2s, border-color 0.2s, transform 0.18s;
+            min-height: 130px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+        }
+        .teo-card:hover {
+            box-shadow: 0 6px 24px rgba(25,118,210,0.15);
+            border-color: #1976d2;
+            transform: translateY(-3px);
+        }
+        .teo-card.active {
+            border-color: #1976d2;
+            background: #e3f0fb;
+            box-shadow: 0 4px 18px rgba(25,118,210,0.18);
+        }
+        .teo-card-icon  { font-size: 36px; line-height: 1; }
+        .teo-card-title { font-size: 13px; font-weight: 800; color: #111;
+                          margin: 0; line-height: 1.25; text-transform: uppercase;
+                          letter-spacing: 0.3px; }
+        .teo-content-box {
+            background: #fff;
+            border: 2px solid #1976d2;
+            border-radius: 16px;
+            padding: 32px 36px;
+            margin-top: 24px;
+        }
+    </style>
+    """, unsafe_allow_html=True)
+
     st.markdown("## 📖 Teoria dos Sistemas Elétricos de Potência")
-    st.markdown("""
-    ### 1. INTRODUÇÃO
-    O crescimento dos sistemas elétricos de potência tornou indispensável o desenvolvimento de ferramentas matemáticas capazes de analisar o comportamento operacional das redes elétricas em regime permanente. Dentre essas ferramentas, o estudo do fluxo de potência possui papel central, permitindo determinar as magnitudes e ângulos das tensões nas barras do sistema, bem como os fluxos de potência ativa e reativa nas linhas de transmissão.
+    st.caption("Selecione um tópico abaixo para estudar.")
 
-    A solução do problema de fluxo de carga envolve a resolução de um sistema não linear de equações algébricas. Entre os métodos numéricos empregados, o Método de Newton-Raphson (MNR) é amplamente utilizado devido à sua elevada precisão e rápida convergência, especialmente em sistemas de grande porte.
+    # Inicializa tópico selecionado
+    if "teoria_topico" not in st.session_state:
+        st.session_state.teoria_topico = None
 
-    ### 2. MODELO DE LINHA DE TRANSMISSÃO TIPO $\\pi$
-    As linhas de transmissão apresentam características resistivas, indutivas e capacitivas distribuídas ao longo de sua extensão. Para análises de fluxo de potência, utiliza-se amplamente o modelo equivalente nominal tipo $\\pi$, pois este fornece boa precisão sem elevar excessivamente a complexidade computacional. A linha de transmissão conectando as barras $k$ e $m$ é representada por uma impedância série e duas susceptâncias shunt igualmente distribuídas:
-    """)
-    st.latex(r"Z_{km} = R_{km} + jX_{km}")
-    if os.path.exists("image_517d43.png"):
-        st.image("image_517d43.png", caption="Figura 1: Modelo equivalente tipo π da linha de transmissão.", width=500)
-    st.markdown("""
-    * A resistência $R$ representa as perdas ôhmicas da linha de transmissão.
-    * A reatância $X$ representa os efeitos indutivos associados ao campo magnético criado pelos condutores.
-    * A susceptância shunt $B_{sh}$ modela os efeitos capacitivos da linha em relação ao solo.
+    # ── Linha de cards de tópico ──────────────────────────────
+    topicos = [
+        ("💡",  "Introdução",              "intro"),
+        ("🔌",  "Linha de\nTransmissão",   "linha"),
+        ("🔀",  "Modelo de\nTransformador","trafo"),
+        ("📊",  "Matriz de\nAdmitância",   "ybus"),
+        ("📐",  "MNR",                     "mnr"),
+    ]
 
-    A admitância série da linha é dada por:
-    """)
-    st.latex(r"Y_{km} = \frac{1}{R_{km} + jX_{km}} = G_{km} + jB_{km}")
+    cols = st.columns(len(topicos), gap="small")
+    for col, (icone, titulo, chave) in zip(cols, topicos):
+        ativo = st.session_state.teoria_topico == chave
+        classe = "teo-card active" if ativo else "teo-card"
+        col.markdown(f"""
+        <div class="{classe}">
+            <div class="teo-card-icon">{icone}</div>
+            <div class="teo-card-title">{titulo}</div>
+        </div>
+        """, unsafe_allow_html=True)
+        label = titulo.replace("\n", " ")
+        if col.button(f"Ver {label}", key=f"teo_{chave}", use_container_width=True):
+            st.session_state.teoria_topico = chave
+            st.rerun()
 
-    st.markdown("""
-    ### 3. MODELO DO TRANSFORMADOR EM-FASE (EQUIVALENTE $\\pi$)
-    O transformador em-fase com relação de transformação $1:a$ (onde $a = V_k/V_m$) e admitância série $y_{km} = 1/(R+jX)$ é representado pelo seguinte circuito equivalente $\\pi$:
-    """)
-    st.latex(r"A = a \cdot y_{km} \quad B = a(a-1) \cdot y_{km} \quad C = (1-a) \cdot y_{km}")
-    st.markdown("As contribuições na matriz $Y_{bus}$ são:")
-    st.latex(r"Y_{kk} \mathrel{+}= a^2 \cdot y_{km} \qquad Y_{mm} \mathrel{+}= y_{km} \qquad Y_{km} = Y_{mk} = -a \cdot y_{km}")
-    st.markdown("""
-    Para $a = 1$ (tap nominal), o modelo reduz-se à admitância série simples. Para $a \\neq 1$, os shunts $B$ e $C$ têm sinais opostos, modelando o efeito do tap sobre as tensões terminais.
+    # ── Painel de conteúdo ────────────────────────────────────
+    topico = st.session_state.teoria_topico
 
-    ### 4. CONSTRUÇÃO DA MATRIZ DE ADMITÂNCIAS NODAIS
-    A representação nodal do sistema elétrico é realizada através da matriz $Y_{bus}$. A relação fundamental da análise nodal é expressa por $I_{bus} = Y_{bus}V_{bus}$.
+    if topico is None:
+        st.info("👆 Clique em um dos tópicos acima para exibir o conteúdo aqui.", icon="📌")
+        st.stop()
 
-    Os elementos diagonais da matriz são formados pela soma das admitâncias conectadas à barra:
-    """)
-    st.latex(r"Y_{kk} = \sum Y_{km} + j\frac{B_{sh}}{2}")
-    st.markdown("Os elementos fora da diagonal representam as conexões entre barras:")
-    st.latex(r"Y_{km} = -Y_{linha}")
+    st.markdown('<div class="teo-content-box">', unsafe_allow_html=True)
 
-    st.markdown("""
-    ### 5. FORMULAÇÃO DO PROBLEMA DE FLUXO DE POTÊNCIA
-    A potência complexa injetada na barra $k$ é definida como $S_k = P_k + jQ_k$ e também $S_k = V_k I_k^*$. Separando as partes real e imaginária:
-    """)
-    st.latex(r"P_{k} = \sum_{m=1}^{NB} V_{k}V_{m} \left[ G_{km}\cos(\theta_{k}-\theta_{m}) + B_{km}\sin(\theta_{k}-\theta_{m}) \right]")
-    st.latex(r"Q_{k} = \sum_{m=1}^{NB} V_{k}V_{m} \left[ G_{km}\sin(\theta_{k}-\theta_{m}) - B_{km}\cos(\theta_{k}-\theta_{m}) \right]")
+    # ----------------------------------------------------------
+    # INTRODUÇÃO
+    # ----------------------------------------------------------
+    if topico == "intro":
+        st.markdown("### 💡 Introdução")
+        st.markdown("""
+O crescimento dos sistemas elétricos de potência tornou indispensável o desenvolvimento
+de ferramentas matemáticas capazes de analisar o comportamento operacional das redes
+elétricas em regime permanente. Dentre essas ferramentas, o estudo do **fluxo de
+potência** possui papel central, permitindo determinar as magnitudes e ângulos das
+tensões nas barras do sistema, bem como os fluxos de potência ativa e reativa nas
+linhas de transmissão.
 
-    st.markdown("""
-    ### 6. CLASSIFICAÇÃO DAS BARRAS
-    * **Barra Slack (Referência):** São conhecidos a magnitude e o ângulo da tensão. As potências ativa e reativa são calculadas durante a solução.
-    * **Barra PQ (Carga):** São especificadas as potências ativa e reativa. As incógnitas são a magnitude e o ângulo da tensão.
-    * **Barra PV (Geração):** São conhecidos a potência ativa e a magnitude da tensão. As incógnitas são a potência reativa e o ângulo.
+O cálculo de fluxo de carga consiste essencialmente na determinação do estado da rede,
+da distribuição dos fluxos e de algumas outras grandezas de interesse. Nesse tipo de
+problema, a modelagem do sistema é estática, significando que a rede é representada por
+um conjunto de equações e inequações algébricas.
 
-    ### 7. MÉTODO DE NEWTON-RAPHSON
-    O método lineariza o sistema através da expansão em série de Taylor, resultando na formulação matricial com a Matriz Jacobiana ($J$):
-    """)
-    st.latex(r"\begin{bmatrix} \Delta P \\ \Delta Q \end{bmatrix} = \begin{bmatrix} H & N \\ M & L \end{bmatrix} \begin{bmatrix} \Delta \theta \\ \Delta V \end{bmatrix}")
-    st.markdown("""
-    As submatrizes representam as derivadas parciais:
-    * $H = \\frac{\\partial P}{\\partial\\theta}$
-    * $N = \\frac{\\partial P}{\\partial V}$
-    * $M = \\frac{\\partial Q}{\\partial\\theta}$
-    * $L = \\frac{\\partial Q}{\\partial V}$
+A solução envolve a resolução de um sistema **não linear** de equações algébricas.
+Entre os métodos numéricos empregados, o Método de Newton-Raphson (MNR) é amplamente
+utilizado devido à sua elevada precisão e rápida convergência, especialmente em sistemas
+de grande porte.
 
-    ### 8. ALGORITMO ITERATIVO
-    1. Inicializar tensões e ângulos (perfil plano: $|V|=1$ pu, $\\theta=0$);
-    2. Construir a matriz $Y_{bus}$ (linhas + transformadores + shunts de barra);
-    3. Calcular potências injetadas ($P_{calc}$ e $Q_{calc}$);
-    4. Determinar os resíduos $\\Delta P$ e $\\Delta Q$;
-    5. Construir a matriz Jacobiana;
-    6. Resolver o sistema linear para $\\Delta\\theta$ e $\\Delta V$;
-    7. Atualizar as variáveis de estado;
-    8. Verificar convergência;
-    9. Repetir até atingir a tolerância especificada.
+#### Classificação das Barras
 
-    ### 9. CONCLUSÃO
-    A formulação matemática baseada na matriz Jacobiana permite resolver iterativamente as equações não lineares do sistema elétrico, fornecendo resultados precisos para tensões, ângulos e fluxos de potência, destacando-se pela sua elevada velocidade de convergência e robustez numérica em sistemas de grande porte.
-    """)
+A cada barra da rede são associadas quatro variáveis: magnitude da tensão $|V_k|$,
+ângulo $\\theta_k$, geração líquida de potência ativa $P_k$ e injeção líquida de
+potência reativa $Q_k$. Dependendo de quais são dados e quais são incógnitas,
+definem-se três tipos de barras:
+        """)
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.markdown("""
+**🔵 Barra Slack (Referência)**
+- Dados: $|V|$ e $\\theta$
+- Incógnitas: $P$ e $Q$
+- Função: referência angular e fechamento do balanço de potência
+            """)
+        with col2:
+            st.markdown("""
+**🟢 Barra PQ (Carga)**
+- Dados: $P$ e $Q$
+- Incógnitas: $|V|$ e $\\theta$
+- Representa barras de carga pura
+            """)
+        with col3:
+            st.markdown("""
+**🟡 Barra PV (Geração)**
+- Dados: $P$ e $|V|$
+- Incógnitas: $Q$ e $\\theta$
+- Representa geradores com controle de tensão
+            """)
+
+    # ----------------------------------------------------------
+    # LINHA DE TRANSMISSÃO
+    # ----------------------------------------------------------
+    elif topico == "linha":
+        st.markdown("### 🔌 Modelo de Linha de Transmissão Tipo $\\pi$")
+        st.markdown("""
+As linhas de transmissão apresentam características resistivas, indutivas e capacitivas
+distribuídas ao longo de sua extensão. Para análises de fluxo de potência, utiliza-se
+amplamente o **modelo equivalente nominal tipo** $\\pi$, pois este fornece boa precisão
+sem elevar excessivamente a complexidade computacional.
+
+A linha conectando as barras $k$ e $m$ é definida por três parâmetros:
+        """)
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("Resistência série", "R (pu)", "Perdas ôhmicas")
+        with col2:
+            st.metric("Reatância série", "X (pu)", "Efeito indutivo")
+        with col3:
+            st.metric("Susceptância shunt", "Bsh (pu)", "Efeito capacitivo")
+
+        st.markdown("#### Impedância e Admitância Série")
+        st.latex(r"Z_{km} = R_{km} + jX_{km}")
+        st.latex(r"y_{km} = \frac{1}{Z_{km}} = \frac{R_{km}}{R_{km}^2 + X_{km}^2} - j\frac{X_{km}}{R_{km}^2 + X_{km}^2} = G_{km} + jB_{km}")
+
+        st.markdown("#### Correntes no Modelo $\\pi$")
+        st.markdown("""
+A corrente $I_{km}$ saindo da barra $k$ em direção à barra $m$ é formada por uma
+componente série e uma componente shunt:
+        """)
+        st.latex(r"I_{km} = y_{km}(E_k - E_m) + jb_{km}^{sh} E_k")
+        st.latex(r"I_{mk} = y_{km}(E_m - E_k) + jb_{km}^{sh} E_m")
+        st.markdown("onde $E_k = V_k e^{j\\theta_k}$ e $E_m = V_m e^{j\\theta_m}$ são as tensões fasoriais terminais.")
+
+        st.markdown("#### Contribuições na $Y_{bus}$")
+        st.latex(r"Y_{kk} \mathrel{+}= y_{km} + j\frac{B_{sh}}{2} \qquad Y_{mm} \mathrel{+}= y_{km} + j\frac{B_{sh}}{2}")
+        st.latex(r"Y_{km} = Y_{mk} = -y_{km}")
+
+    # ----------------------------------------------------------
+    # TRANSFORMADOR EM-FASE
+    # ----------------------------------------------------------
+    elif topico == "trafo":
+        st.markdown("### 🔀 Modelo do Transformador em-Fase (Equivalente $\\pi$)")
+        st.markdown("""
+O transformador em-fase com relação de transformação $1:a$ (número real positivo,
+onde $a = V_k/V_m$) e admitância série $y_{km} = 1/(R+jX)$ é representado por um
+autotransformador ideal em série com a admitância $y_{km}$.
+
+A partir das equações de corrente desse modelo e identificando os coeficientes com
+um circuito $\\pi$ equivalente, obtêm-se três admitâncias (eq. 1.15 do livro de
+referência do projeto):
+        """)
+        st.latex(r"A = a \cdot y_{km} \qquad B = a(a-1) \cdot y_{km} \qquad C = (1-a) \cdot y_{km}")
+
+        st.markdown("#### Topologia do Circuito $\\pi$ Equivalente")
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.info("**Ramo série** entre k e m\n\n$A = a \\cdot y_{km}$")
+        with col2:
+            st.info("**Shunt na barra k** (lado do tap)\n\n$B = a(a-1) \\cdot y_{km}$")
+        with col3:
+            st.info("**Shunt na barra m** (lado oposto)\n\n$C = (1-a) \\cdot y_{km}$")
+
+        st.markdown("#### Contribuições na $Y_{bus}$")
+        st.latex(r"Y_{kk} \mathrel{+}= a^2 \cdot y_{km} \qquad Y_{mm} \mathrel{+}= y_{km}")
+        st.latex(r"Y_{km} = Y_{mk} = -a \cdot y_{km}")
+
+        st.markdown("#### Efeito do Tap $a$")
+        st.markdown("""
+| Valor de $a$ | Shunt $B$ | Shunt $C$ | Efeito físico |
+|:---:|:---:|:---:|:---|
+| $a = 1$ | $0$ | $0$ | Tap nominal — reduz-se à admitância série simples |
+| $a > 1$ | Indutivo | Capacitivo | Tende a **reduzir** $V_m$ e aumentar $V_k$ |
+| $a < 1$ | Capacitivo | Indutivo | Tende a **aumentar** $V_m$ e reduzir $V_k$ |
+
+> ⚠️ O modelo é **assimétrico**: $Y_{kk} \\neq Y_{mm}$ quando $a \\neq 1$,
+> pois a barra $k$ é o lado do tap. A ordem de conexão importa.
+        """)
+
+    # ----------------------------------------------------------
+    # MATRIZ DE ADMITÂNCIA NODAL
+    # ----------------------------------------------------------
+    elif topico == "ybus":
+        st.markdown("### 📊 Construção da Matriz de Admitâncias Nodais ($Y_{bus}$)")
+        st.markdown("""
+A representação nodal do sistema elétrico é realizada através da matriz $Y_{bus}$,
+que relaciona as injeções de corrente nas barras com as tensões nodais:
+        """)
+        st.latex(r"\mathbf{I}_{bus} = \mathbf{Y}_{bus} \, \mathbf{V}_{bus}")
+
+        st.markdown("#### Regra de Montagem")
+        st.markdown("""
+A montagem da $Y_{bus}$ segue duas regras diretas aplicadas para cada elemento
+de ramo (linha ou transformador) conectando as barras $k$ e $m$:
+        """)
+        col1, col2 = st.columns(2)
+        with col1:
+            st.markdown("**Elementos diagonais** — soma de todas as admitâncias incidentes na barra:")
+            st.latex(r"Y_{kk} = \sum_{m \in \Omega_k} y_{km} + jB_{sh,k}")
+        with col2:
+            st.markdown("**Elementos fora da diagonal** — negativo da admitância do ramo:")
+            st.latex(r"Y_{km} = -y_{km} \quad (k \neq m)")
+
+        st.markdown("#### Propriedades da $Y_{bus}$")
+        st.markdown("""
+- **Simétrica** para redes sem transformadores defasadores: $Y_{km} = Y_{mk}$
+- **Esparsidade elevada**: a maioria dos elementos é zero (cada barra conecta-se a poucas outras)
+- **Singular** se a rede contiver uma ilha sem barra Slack — o sistema não tem solução única
+- Para transformadores em-fase, a simetria é preservada ($Y_{km} = Y_{mk} = -a \\cdot y_{km}$),
+  mas os elementos diagonais são assimétricos ($Y_{kk} = a^2 y_{km}$, $Y_{mm} = y_{km}$)
+        """)
+
+        st.markdown("#### Contribuições por tipo de elemento")
+        st.markdown("""
+| Elemento | $Y_{kk}$ | $Y_{mm}$ | $Y_{km} = Y_{mk}$ |
+|:---|:---:|:---:|:---:|
+| Linha de transmissão | $y_{km} + jB_{sh}/2$ | $y_{km} + jB_{sh}/2$ | $-y_{km}$ |
+| Transformador ($1:a$) | $a^2 \\cdot y_{km}$ | $y_{km}$ | $-a \\cdot y_{km}$ |
+| Shunt de barra | $+jB_{sh,barra}$ | — | — |
+        """)
+
+    # ----------------------------------------------------------
+    # MÉTODO DE NEWTON-RAPHSON
+    # ----------------------------------------------------------
+    elif topico == "mnr":
+        st.markdown("### 📐 Método de Newton-Raphson (MNR)")
+
+        st.markdown("#### 1. Formulação do Problema de Fluxo de Potência")
+        st.markdown("""
+A potência complexa injetada na barra $k$ é $S_k = P_k + jQ_k = V_k I_k^*$.
+Expandindo em termos dos elementos da $Y_{bus}$ e separando partes real e imaginária:
+        """)
+        st.latex(r"P_{k} = \sum_{m=1}^{NB} V_{k}V_{m} \left[ G_{km}\cos(\theta_{k}-\theta_{m}) + B_{km}\sin(\theta_{k}-\theta_{m}) \right]")
+        st.latex(r"Q_{k} = \sum_{m=1}^{NB} V_{k}V_{m} \left[ G_{km}\sin(\theta_{k}-\theta_{m}) - B_{km}\cos(\theta_{k}-\theta_{m}) \right]")
+        st.markdown("""
+Essas equações formam um sistema não linear com $2 \\times NB$ equações (uma $P$ e uma
+$Q$ por barra), mas as variáveis da barra Slack são conhecidas, e $Q$ das barras PV é
+incógnita — logo o sistema efetivo tem $n_{PV} + 2 \\times n_{PQ}$ equações.
+        """)
+
+        st.markdown("#### 2. Vetor de Resíduos (Mismatch)")
+        st.markdown("""
+O MNR busca zerar o vetor de resíduos $\\mathbf{f}$, definido pela diferença entre
+potências especificadas e calculadas, montado apenas para as barras e equações ativas:
+        """)
+        st.latex(r"\mathbf{f} = \begin{bmatrix} \Delta P \\ \Delta Q \end{bmatrix} = \begin{bmatrix} P^{esp} - P^{calc} \\ Q^{esp} - Q^{calc} \end{bmatrix}")
+        st.markdown("""
+- $\\Delta P_k$: calculado para todas as barras **PV e PQ** (Slack excluída)
+- $\\Delta Q_k$: calculado apenas para barras **PQ** (Slack e PV excluídas)
+        """)
+
+        st.markdown("#### 3. Matriz Jacobiana")
+        st.markdown("""
+O MNR lineariza o sistema a cada iteração pela expansão em série de Taylor truncada
+na primeira ordem. A matriz Jacobiana $J$ agrupa as derivadas parciais das equações
+de potência em relação às variáveis de estado $\\theta$ e $|V|$:
+        """)
+        st.latex(r"J = \begin{bmatrix} H & N \\ M & L \end{bmatrix} = \begin{bmatrix} \dfrac{\partial P}{\partial \theta} & \dfrac{\partial P}{\partial V} \\[12pt] \dfrac{\partial Q}{\partial \theta} & \dfrac{\partial Q}{\partial V} \end{bmatrix}")
+
+        st.markdown("**Termos fora da diagonal** ($i \\neq k$):")
+        st.latex(r"H_{ik} =  V_i V_k (G_{ik}\sin\theta_{ik} - B_{ik}\cos\theta_{ik})")
+        st.latex(r"N_{ik} =  V_i (G_{ik}\cos\theta_{ik} + B_{ik}\sin\theta_{ik})")
+        st.latex(r"M_{ik} = -V_i V_k (G_{ik}\cos\theta_{ik} + B_{ik}\sin\theta_{ik})")
+        st.latex(r"L_{ik} =  V_i (G_{ik}\sin\theta_{ik} - B_{ik}\cos\theta_{ik})")
+
+        st.markdown("**Termos diagonais** ($i = k$), expressos em forma fechada usando $P_i^{calc}$ e $Q_i^{calc}$:")
+        st.latex(r"H_{ii} = -Q_i^{calc} - V_i^2 B_{ii}")
+        st.latex(r"N_{ii} =  P_i^{calc} + V_i^2 G_{ii}")
+        st.latex(r"M_{ii} =  P_i^{calc} - V_i^2 G_{ii}")
+        st.latex(r"L_{ii} =  Q_i^{calc} - V_i^2 B_{ii}")
+        st.caption("onde $\\theta_{ik} = \\theta_i - \\theta_k$.")
+
+        st.markdown("#### 4. Sistema Linear de Correção")
+        st.markdown("A cada iteração $\\nu$, resolve-se o sistema linear:")
+        st.latex(r"J^{(\nu)} \begin{bmatrix} \Delta\theta^{(\nu)} \\ \Delta V^{(\nu)} \end{bmatrix} = \begin{bmatrix} \Delta P^{(\nu)} \\ \Delta Q^{(\nu)} \end{bmatrix}")
+
+        st.markdown("#### 5. Atualização das Variáveis de Estado")
+        st.latex(r"\theta^{(\nu+1)} = \theta^{(\nu)} + \Delta\theta^{(\nu)}")
+        st.latex(r"|V|^{(\nu+1)} = |V|^{(\nu)} + \Delta|V|^{(\nu)}")
+        st.markdown("""
+> A barra Slack mantém $\\theta$ e $|V|$ fixos durante todas as iterações.
+> As barras PV mantêm $|V|$ fixo — apenas $\\theta$ é atualizado para elas.
+        """)
+
+        st.markdown("#### 6. Critério de Convergência")
+        st.latex(r"\max\left\{|\Delta P_i|,\, |\Delta Q_i|\right\} \leq \varepsilon")
+        st.markdown("Valores típicos de tolerância: $\\varepsilon = 10^{-4}$ a $10^{-6}$ pu.")
+
+        st.markdown("#### 7. Algoritmo Iterativo Completo")
+        st.markdown("""
+1. **Inicialização** — perfil plano: $|V_k|^{(0)} = 1{,}0$ pu, $\\theta_k^{(0)} = 0$ para todas as barras (exceto Slack)
+2. **Montagem da** $Y_{bus}$ — inclui linhas, transformadores e shunts de barra
+3. **Cálculo das potências** $P_k^{calc}$ e $Q_k^{calc}$ com as tensões atuais
+4. **Cálculo do mismatch** $\\Delta P$ e $\\Delta Q$ para as barras e equações ativas
+5. **Teste de convergência** — se $\\max|\\mathbf{f}| \\leq \\varepsilon$, encerrar
+6. **Montagem da Jacobiana** $J^{(\\nu)}$ usando $P^{calc}$, $Q^{calc}$ e a $Y_{bus}$
+7. **Resolução do sistema linear** $J^{(\\nu)} \\Delta x = \\mathbf{f}$
+8. **Atualização** de $\\theta$ (PV e PQ) e $|V|$ (PQ)
+9. **Retornar ao passo 3**
+        """)
+
+    st.markdown('</div>', unsafe_allow_html=True)
     st.stop()
 
 # ======================================================
