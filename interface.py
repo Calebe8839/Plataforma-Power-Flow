@@ -715,6 +715,10 @@ if st.session_state.pagina == "simulacao":
                 const svg   = document.getElementById("wires");
                 const panel = document.getElementById("properties-panel");
                 panel.addEventListener('mousedown', e => e.stopPropagation());
+                // Constantes declaradas antes de initSlack() (evita erro de TDZ em const)
+                const SVG_NS = "http://www.w3.org/2000/svg";
+                const fmtNum = v => String(+parseFloat(v).toFixed(4));
+                const BUS_SHUNT_AO_LONGO = 30, BUS_SHUNT_DEGRAU = 40;
 
                 function initSlack() {
                     const b = { id: idCounter++, type: 'slack', x: 150, y: 300, v: 1.06, theta: 0, bsh_bus: 0, rotState: 0, el: null };
@@ -722,22 +726,57 @@ if st.session_state.pagina == "simulacao":
                 }
                 initSlack();
 
-                function getBusShuntSVG(val) {
-                    if (!val || val === 0) return "";
+                // Símbolo de elemento shunt SEMPRE na vertical, aterrado para baixo.
+                // (x, y) = ponto de conexão no topo. val > 0 → capacitor (azul); val < 0 → reator (vermelho).
+                // lado = +1 escreve o valor à direita do símbolo; -1 à esquerda.
+                function shuntSymbolSVG(x, y, val, texto, lado) {
                     const isCap = val > 0;
-                    const color = isCap ? "#1976d2" : "#d32f2f";
-                    let symbol = isCap
-                        ? `<path d="M -10 15 L 10 15" stroke="${color}" stroke-width="3"/><path d="M -10 20 L 10 20" stroke="${color}" stroke-width="3"/>`
-                        : `<path d="M 0 10 Q -8 14 0 18 Q 8 22 0 26 Q -8 30 0 34" fill="none" stroke="${color}" stroke-width="2.5"/>`;
-                    const yEnd = isCap ? 20 : 34; const yTerra = isCap ? 35 : 50;
-                    return `<svg style="position:absolute; top:40px; left:-25px; width:50px; height:80px; pointer-events:none; overflow:visible; z-index:5;">
-                        <path d="M 0 0 L 0 10" stroke="#000" stroke-width="2"/>${symbol}
-                        <path d="M 0 ${yEnd} L 0 ${yTerra}" stroke="#000" stroke-width="2"/>
-                        <path d="M -12 ${yTerra} L 12 ${yTerra}" stroke="#000" stroke-width="2"/>
-                        <path d="M -8 ${yTerra+5} L 8 ${yTerra+5}" stroke="#000" stroke-width="2"/>
-                        <path d="M -4 ${yTerra+10} L 4 ${yTerra+10}" stroke="#000" stroke-width="2"/>
-                        <text x="15" y="25" font-size="12" font-weight="bold" fill="${color}">${val}</text>
-                    </svg>`;
+                    const cor = isCap ? "#1976d2" : "#d32f2f";
+                    const s = lado || 1;
+                    let elemento;
+                    if (isCap) {
+                        elemento = `<path d="M ${x} ${y} L ${x} ${y+8}" stroke="#000" stroke-width="2"/>
+                            <path d="M ${x-9} ${y+8} L ${x+9} ${y+8}" stroke="${cor}" stroke-width="3"/>
+                            <path d="M ${x-9} ${y+13} L ${x+9} ${y+13}" stroke="${cor}" stroke-width="3"/>
+                            <path d="M ${x} ${y+13} L ${x} ${y+22}" stroke="#000" stroke-width="2"/>`;
+                    } else {
+                        elemento = `<path d="M ${x} ${y} L ${x} ${y+4}" stroke="#000" stroke-width="2"/>
+                            <path d="M ${x} ${y+4} q -8 2.5 0 5 q 8 2.5 0 5 q -8 2.5 0 5" fill="none" stroke="${cor}" stroke-width="2.5"/>
+                            <path d="M ${x} ${y+19} L ${x} ${y+22}" stroke="#000" stroke-width="2"/>`;
+                    }
+                    const terra = `<path d="M ${x-10} ${y+22} L ${x+10} ${y+22}" stroke="#000" stroke-width="2"/>
+                        <path d="M ${x-6} ${y+26} L ${x+6} ${y+26}" stroke="#000" stroke-width="2"/>
+                        <path d="M ${x-2} ${y+30} L ${x+2} ${y+30}" stroke="#000" stroke-width="2"/>`;
+                    const txt = `<text x="${x + s*13}" y="${y+15}" text-anchor="${s > 0 ? 'start' : 'end'}"
+                        font-size="11" font-weight="bold" fill="${cor}">${texto}</text>`;
+                    return elemento + terra + txt;
+                }
+
+                // Shunt de barra: desenhado na camada SVG global, ligado fisicamente à barra.
+                // Barra vertical: derivação a 30 px abaixo do centro, degrau de 40 px para o lado da carga.
+                // Barra horizontal: desce direto da barra, 35 px à direita do centro.
+                // Geradores e cargas ficam no centro da barra (±140 px), então não há sobreposição.
+                function renderBusShunt(b) {
+                    if (!b.elShunt) {
+                        b.elShunt = document.createElementNS(SVG_NS, "g");
+                        b.elShunt.setAttribute("pointer-events", "none");
+                        svg.appendChild(b.elShunt);
+                    }
+                    const val = parseFloat(b.bsh_bus) || 0;
+                    if (val === 0) { b.elShunt.innerHTML = ""; return; }
+                    const s = b.rotState || 0;
+                    let html;
+                    if (s === 0 || s === 2) {
+                        const lado = (s === 0) ? 1 : -1;
+                        const ya = b.y + BUS_SHUNT_AO_LONGO;
+                        const xs = b.x + lado * BUS_SHUNT_DEGRAU;
+                        html = `<path d="M ${b.x} ${ya} L ${xs} ${ya}" stroke="#000" stroke-width="2"/>`
+                             + shuntSymbolSVG(xs, ya, val, fmtNum(val), lado);
+                    } else {
+                        const xa = b.x + BUS_SHUNT_AO_LONGO + 5;
+                        html = shuntSymbolSVG(xa, b.y, val, fmtNum(val), 1);
+                    }
+                    b.elShunt.innerHTML = html;
                 }
 
                 function renderBarra(b) {
@@ -756,10 +795,10 @@ if st.session_state.pagina == "simulacao":
                     const angle = (b.rotState || 0) * 90;
                     el.innerHTML = `<div class="label" style="top:-35px;">${topText}</div>
                                     <div class="barra-linha" style="transform:rotate(${angle}deg);"></div>
-                                    <div class="label" style="bottom:-35px;color:#1976d2">${bottomText}</div>
-                                    ${getBusShuntSVG(b.bsh_bus)}`;
+                                    <div class="label" style="bottom:-35px;color:#1976d2">${bottomText}</div>`;
                     makeDraggable(el, b, 'barra');
                     ws.appendChild(el); b.el = el;
+                    renderBusShunt(b);
                     if (selectedElement && selectedElement.id === b.id && selectedType === 'barra')
                         el.classList.add("selected");
                 }
@@ -883,6 +922,10 @@ if st.session_state.pagina == "simulacao":
                         svg.appendChild(l.elPath);
                         l.elSymbol = document.createElementNS("http://www.w3.org/2000/svg", "g");
                         svg.appendChild(l.elSymbol);
+                        // Grupo dos shunts da linha fora do grupo rotacionado → símbolos sempre verticais
+                        l.elShunts = document.createElementNS(SVG_NS, "g");
+                        l.elShunts.setAttribute("pointer-events", "none");
+                        svg.appendChild(l.elShunts);
                         l.elLabel = document.createElement("div");
                         l.elLabel.className = "label"; l.elLabel.style.zIndex = "40";
                         ws.appendChild(l.elLabel);
@@ -912,20 +955,63 @@ if st.session_state.pagina == "simulacao":
                         ind.setAttribute("d","M -15 0 Q -10 -15 -5 0 Q 0 -15 5 0 Q 10 -15 15 0"); ind.setAttribute("fill","none"); ind.setAttribute("stroke","#1976d2"); ind.setAttribute("stroke-width","2.5");
                         ig.appendChild(ind); l.elSymbol.appendChild(ig);
                     }
-                    if (l.bsh > 0) {
-                        const len = Math.sqrt(dx*dx+dy*dy);
-                        if (len > 0) {
-                            const o1 = -len/2+len*0.25, o2 = len/2-len*0.25;
-                            const shuntSVG = (x) => `<path d="M ${x} 0 L ${x} 15" stroke="#000" stroke-width="2" fill="none"/>
-                                <path d="M ${x-10} 15 L ${x+10} 15" stroke="#1976d2" stroke-width="3" fill="none"/>
-                                <path d="M ${x-10} 20 L ${x+10} 20" stroke="#1976d2" stroke-width="3" fill="none"/>
-                                <path d="M ${x} 20 L ${x} 35" stroke="#000" stroke-width="2" fill="none"/>
-                                <path d="M ${x-12} 35 L ${x+12} 35" stroke="#000" stroke-width="2" fill="none"/>
-                                <path d="M ${x-8} 40 L ${x+8} 40" stroke="#000" stroke-width="2" fill="none"/>
-                                <path d="M ${x-4} 45 L ${x+4} 45" stroke="#000" stroke-width="2" fill="none"/>
-                                <text x="${x+12}" y="25" font-size="12" font-weight="bold" fill="#1976d2">jbsh</text>`;
-                            l.elSymbol.innerHTML += shuntSVG(o1) + shuntSVG(o2);
+                    // Shunts do modelo π: B/2 em cada extremidade, sempre na vertical.
+                    l.elShunts.innerHTML = '';
+                    const bshVal = parseFloat(l.bsh) || 0;
+                    const len = Math.hypot(dx, dy);
+                    if (bshVal !== 0 && len > 0) {
+                        const ux = dx/len, uy = dy/len;
+                        // Linha íngreme (> ~35°): degrau horizontal para o lado oposto à descida da linha,
+                        // senão o símbolo vertical ficaria em cima do próprio traço da linha.
+                        const ingreme = Math.abs(ux) < 0.82;
+                        let lado = 1;
+                        if (ingreme) {
+                            const dxDescendo = (uy >= 0) ? ux : -ux;
+                            lado = dxDescendo > 0 ? -1 : 1;
                         }
+                        const texto = "j" + fmtNum(bshVal/2);
+                        // Obstáculos já desenhados (rótulos, corpo das barras, geradores, cargas) para evitar sobreposição
+                        const wsR = ws.getBoundingClientRect();
+                        const rotulos = Array.from(ws.querySelectorAll(".label, .barra-linha, .gerador-circulo, .carga-seta"))
+                            .filter(e => e !== l.elLabel && e.offsetParent !== null)
+                            .map(e => { const r = e.getBoundingClientRect();
+                                        return { x1: r.left - wsR.left - 4, x2: r.right - wsR.left + 4,
+                                                 y1: r.top - wsR.top - 4,   y2: r.bottom - wsR.top + 4 }; });
+                        const caixaShunt = (px, py) => {
+                            const sx = ingreme ? px + lado*22 : px;
+                            const xt = sx + lado*(13 + 6.5*texto.length);
+                            return { x1: Math.min(px, sx - 11, xt), x2: Math.max(px, sx + 11, xt),
+                                     y1: py - 3, y2: py + 32 };
+                        };
+                        const sobreposicao = c => rotulos.reduce((acc, r) =>
+                            acc + Math.max(0, Math.min(c.x2, r.x2) - Math.max(c.x1, r.x1))
+                                * Math.max(0, Math.min(c.y2, r.y2) - Math.max(c.y1, r.y1)), 0);
+                        // Para cada extremidade testa posições ao longo da linha (fração medida a partir da barra)
+                        // e fica com a de menor sobreposição; a 1ª sem sobreposição encerra a busca.
+                        const fracoes = [0.25, 0.30, 0.20, 0.35, 0.40, 0.15];
+                        const posicao = (ox, oy, sgn) => {
+                            let melhor = null, menor = Infinity;
+                            for (const f of fracoes) {
+                                const d = len * f;
+                                const px = ox + sgn*ux*d, py = oy + sgn*uy*d;
+                                const area = sobreposicao(caixaShunt(px, py));
+                                if (area < menor) { menor = area; melhor = [px, py]; }
+                                if (area === 0) break;
+                            }
+                            return melhor;
+                        };
+                        const pontos = [posicao(b1.x, b1.y, 1), posicao(b2.x, b2.y, -1)];
+                        let html = "";
+                        pontos.forEach(([px, py]) => {
+                            let sx = px;
+                            if (ingreme) {
+                                sx = px + lado*22;
+                                html += `<path d="M ${px} ${py} L ${sx} ${py}" stroke="#000" stroke-width="2"/>`;
+                            }
+                            html += `<circle cx="${px}" cy="${py}" r="2.5" fill="#000"/>`
+                                  + shuntSymbolSVG(sx, py, bshVal, texto, lado);
+                        });
+                        l.elShunts.innerHTML = html;
                     }
                     l.elLabel.innerHTML = `Z: ${l.r}+j${l.x}`;
                     l.elLabel.style.left = midX+"px"; l.elLabel.style.top = (midY-40)+"px";
@@ -982,6 +1068,7 @@ if st.session_state.pagina == "simulacao":
                 }
 
                 function updateAllWires() {
+                    barras.forEach(renderBusShunt);
                     linhas.forEach(renderLinha);
                     transformadores.forEach(renderTrafo);
                     geradores.forEach(g => positionAttached(g, barras.find(b => b.id===g.barraId), 'gerador'));
@@ -1055,7 +1142,7 @@ if st.session_state.pagina == "simulacao":
                         document.getElementById("panel-title").innerText = `Linha B${item.b1} ↔ B${item.b2}`;
                         html += `<div class="prop-group"><label>Resistência r (pu)</label><input type="number" step="0.001" value="${item.r}" onchange="updateProp('r',this.value)"></div>`;
                         html += `<div class="prop-group"><label>Reatância x (pu)</label><input type="number" step="0.001" value="${item.x}" onchange="updateProp('x',this.value)"></div>`;
-                        html += `<div class="prop-group"><label>Susceptância shunt bsh (pu)</label><input type="number" step="0.001" value="${item.bsh}" onchange="updateProp('bsh',this.value)"></div>`;
+                        html += `<div class="prop-group"><label>Susceptância shunt total B (pu) — B/2 em cada extremidade</label><input type="number" step="0.001" value="${item.bsh}" onchange="updateProp('bsh',this.value)"></div>`;
 
                     } else if (type === 'trafo') {
                         item.elPath.classList.add("selected");
@@ -1090,7 +1177,7 @@ if st.session_state.pagina == "simulacao":
                     if (selectedType === 'barra') {
                         if (selectedElement.type === 'slack') { alert("A Barra Slack não pode ser excluída!"); return; }
                         linhas.filter(l => l.b1===selectedElement.id || l.b2===selectedElement.id).forEach(l => {
-                            if(l.elPath) l.elPath.remove(); if(l.elLabel) l.elLabel.remove(); if(l.elSymbol) l.elSymbol.remove();
+                            if(l.elPath) l.elPath.remove(); if(l.elLabel) l.elLabel.remove(); if(l.elSymbol) l.elSymbol.remove(); if(l.elShunts) l.elShunts.remove();
                         });
                         linhas = linhas.filter(l => l.b1!==selectedElement.id && l.b2!==selectedElement.id);
                         transformadores.filter(t => t.bk===selectedElement.id || t.bm===selectedElement.id).forEach(t => {
@@ -1101,12 +1188,14 @@ if st.session_state.pagina == "simulacao":
                         geradores = geradores.filter(g => g.barraId!==selectedElement.id);
                         cargas.filter(c => c.barraId===selectedElement.id).forEach(c => { c.el.remove(); c.elWire.remove(); });
                         cargas = cargas.filter(c => c.barraId!==selectedElement.id);
+                        if (selectedElement.elShunt) selectedElement.elShunt.remove();
                         selectedElement.el.remove();
                         barras = barras.filter(b => b.id!==selectedElement.id);
                     } else if (selectedType === 'linha') {
                         if(selectedElement.elPath) selectedElement.elPath.remove();
                         if(selectedElement.elLabel) selectedElement.elLabel.remove();
                         if(selectedElement.elSymbol) selectedElement.elSymbol.remove();
+                        if(selectedElement.elShunts) selectedElement.elShunts.remove();
                         linhas = linhas.filter(l => l.id!==selectedElement.id);
                     } else if (selectedType === 'trafo') {
                         if(selectedElement.elPath) selectedElement.elPath.remove();
