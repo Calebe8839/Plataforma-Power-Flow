@@ -1650,7 +1650,7 @@ if st.session_state.pagina == "simulacao":
         <head>
             <meta charset="UTF-8">
             <style>
-                body { font-family: Arial, sans-serif; background: #cfcfcf; color: black; margin: 0; user-select: none; overflow: hidden; }
+                body { font-family: Arial, sans-serif; background: #cfcfcf; color: black; margin: 0; user-select: none; overflow: hidden; -webkit-tap-highlight-color: transparent; }
                 .toolbar { background: #e0e0e0; padding: 10px; display: flex; gap: 8px; border-bottom: 2px solid #999; align-items: center; flex-wrap: wrap; }
                 .btn { background: #fff; color: #333; border: 1px solid #999; padding: 8px 14px; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 13px; transition: 0.2s; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
                 .btn:hover { background: #eee; }
@@ -1658,8 +1658,14 @@ if st.session_state.pagina == "simulacao":
                 .btn-action { background: #1976d2; color: white; border-color: #115293; }
                 .btn-trafo  { background: #6a1b9a; color: white; border-color: #4a148c; }
                 .btn-calc   { background: #2e7d32; color: white; border-color: #1b5e20; margin-left: auto; }
-                #workspace  { position: relative; height: 600px; cursor: default; background-color: #cfcfcf; }
-                .component  { position: absolute; cursor: pointer; display: flex; flex-direction: column; align-items: center; transform: translate(-50%, -50%); z-index: 20; }
+                /* Vista (janela visível) e mundo (área de desenho, maior que a janela, com zoom).
+                   touch-action: manipulation → no celular, o dedo no fundo rola a página normalmente;
+                   no modo Mover, o canvas assume os gestos (arrastar a vista e pinçar para zoom). */
+                #viewport   { position: relative; height: 600px; overflow: hidden; background: #b9b9b9; cursor: grab; touch-action: manipulation; }
+                #viewport.modo-mover { touch-action: none; cursor: move; box-shadow: inset 0 0 0 3px #ff9800; }
+                #workspace  { position: absolute; left: 0; top: 0; width: 2400px; height: 1600px; transform-origin: 0 0;
+                              background-color: #cfcfcf; background-image: radial-gradient(#b0b0b0 1px, transparent 1px); background-size: 40px 40px; }
+                .component  { position: absolute; cursor: pointer; display: flex; flex-direction: column; align-items: center; transform: translate(-50%, -50%); z-index: 20; touch-action: none; }
                 .component.selected .barra-linha { box-shadow: 0 0 10px 3px #1976d2; background: #1976d2; }
                 .barra-linha { background: #000; border-radius: 4px; transition: transform 0.2s; width: 8px; height: 120px; }
                 .gerador-circulo { width: 44px; height: 44px; border: 2px solid #000; border-radius: 50%; background: #cfcfcf; display: flex; align-items: center; justify-content: center; font-size: 22px; font-weight: bold; }
@@ -1670,11 +1676,27 @@ if st.session_state.pagina == "simulacao":
                 .trafo-path { stroke: #6a1b9a; stroke-width: 2.5; fill: none; pointer-events: stroke; cursor: pointer; stroke-dasharray: 8 4; }
                 .wire-path.selected  { stroke: #1976d2; stroke-width: 5; }
                 .trafo-path.selected { stroke: #6a1b9a; stroke-width: 5; }
-                #properties-panel { position: absolute; right: 15px; top: 15px; width: 240px; background: #fff; border: 1px solid #999; box-shadow: 0 5px 20px rgba(0,0,0,0.4); padding: 18px; border-radius: 8px; display: none; z-index: 100; cursor: default; }
+                /* Faixa invisível sobre linhas e trafos: alvo de toque de ~18 px em vez do traço de 2,5 px */
+                .hit-path   { stroke: transparent; stroke-width: 18; fill: none; pointer-events: stroke; cursor: pointer; }
+                .btn.ativo  { background: #ff9800; color: #fff; border-color: #e65100; }
+                .zoom-grupo { display: flex; gap: 4px; align-items: center; }
+                .btn-zoom   { padding: 6px 12px; font-size: 16px; line-height: 1; }
+                .zoom-label { min-width: 44px; text-align: center; font-size: 12px; font-weight: bold; color: #333; }
+                .dica       { font-size: 12px; color: #444; background: #e0e0e0; padding: 6px 10px; border-top: 1px solid #999; }
+                #properties-panel { position: absolute; right: 15px; top: 15px; width: 240px; max-height: calc(100% - 30px); overflow-y: auto; box-sizing: border-box; background: #fff; border: 1px solid #999; box-shadow: 0 5px 20px rgba(0,0,0,0.4); padding: 18px; border-radius: 8px; display: none; z-index: 100; cursor: default; touch-action: pan-y; }
                 #properties-panel h4 { margin: 0 0 12px 0; font-size: 15px; color: #222; border-bottom: 2px solid #1976d2; padding-bottom: 6px; }
                 .prop-group { margin-bottom: 12px; }
                 .prop-group label { display: block; font-size: 12px; margin-bottom: 4px; color: #444; font-weight: bold; }
                 .prop-group input, .prop-group select { width: 100%; box-sizing: border-box; padding: 6px; font-size: 13px; border: 1px solid #ccc; border-radius: 4px; }
+                /* Telas estreitas (celular): botões menores, Calcular em linha própria e
+                   painel de propriedades como faixa na parte de baixo, sem cobrir o desenho. */
+                @media (max-width: 640px) {
+                    .toolbar { padding: 8px; gap: 6px; }
+                    .btn { padding: 8px 10px; font-size: 12px; }
+                    .btn-calc { margin-left: 0; width: 100%; }
+                    #properties-panel { left: 8px; right: 8px; top: auto; bottom: 8px; width: auto; max-height: 55%; padding: 12px; }
+                    .prop-group input, .prop-group select { font-size: 16px; } /* evita zoom automático do iOS ao focar */
+                }
             </style>
         </head>
         <body>
@@ -1685,24 +1707,32 @@ if st.session_state.pagina == "simulacao":
                 <button class="btn btn-action" id="btnConnect" onclick="toggleConnectMode('linha')">🔗 Conectar Linha</button>
                 <button class="btn btn-trafo"  id="btnTrafo"   onclick="toggleConnectMode('trafo')">🔀 Conectar Trafo</button>
                 <button class="btn btn-danger" onclick="deleteSelected()">🗑 Excluir</button>
+                <div class="zoom-grupo">
+                    <button class="btn btn-zoom" onclick="zoomBotao(1/1.2)" title="Diminuir zoom">−</button>
+                    <span id="zoomLabel" class="zoom-label">100%</span>
+                    <button class="btn btn-zoom" onclick="zoomBotao(1.2)" title="Aumentar zoom">+</button>
+                    <button class="btn" onclick="ajustarATela()" title="Enquadrar todo o diagrama na tela">⤢ Ajustar</button>
+                    <button class="btn" id="btnMover" onclick="alternarMover()" title="Arrastar a vista e pinçar para zoom (celular)">✋ Mover</button>
+                    <button class="btn" id="btnArea" onclick="alternarArea()" title="Aumentar a altura da área de desenho">⇕ Ampliar área</button>
+                </div>
                 <button class="btn btn-calc"   onclick="exportarParaPython()">▶ CALCULAR FLUXO (DESENHO)</button>
             </div>
-            <div id="workspace">
-                <svg id="wires"></svg>
+            <div id="viewport">
+                <div id="workspace">
+                    <svg id="wires"></svg>
+                </div>
                 <div id="properties-panel">
                     <h4 id="panel-title">Propriedades</h4>
                     <div id="panel-content"></div>
                 </div>
             </div>
+            <div id="dica" class="dica"></div>
 
             <script>
                 function sendMessageToStreamlit(data) {
                     window.parent.postMessage({ isStreamlitMessage: true, type: "streamlit:setComponentValue", value: data }, "*");
                 }
                 window.parent.postMessage({ isStreamlitMessage: true, type: "streamlit:componentReady", apiVersion: 1 }, "*");
-                setInterval(() => {
-                    window.parent.postMessage({ isStreamlitMessage: true, type: "streamlit:setFrameHeight", height: 650 }, "*");
-                }, 500);
 
                 let barras = [], linhas = [], transformadores = [];
                 let geradores = [], cargas = [];
@@ -1718,11 +1748,163 @@ if st.session_state.pagina == "simulacao":
                 const ws    = document.getElementById("workspace");
                 const svg   = document.getElementById("wires");
                 const panel = document.getElementById("properties-panel");
-                panel.addEventListener('mousedown', e => e.stopPropagation());
+                panel.addEventListener('pointerdown', e => e.stopPropagation());
                 // Constantes declaradas antes de initSlack() (evita erro de TDZ em const)
                 const SVG_NS = "http://www.w3.org/2000/svg";
                 const fmtNum = v => String(+parseFloat(v).toFixed(4));
                 const BUS_SHUNT_AO_LONGO = 30, BUS_SHUNT_DEGRAU = 40;
+
+                // ===================== VISTA: ZOOM, DESLOCAMENTO E ÁREA =====================
+                // O desenho fica num "mundo" de 2400 × 1600 px (#workspace), visto por uma janela
+                // (#viewport). Zoom e deslocamento são um transform CSS no mundo: as coordenadas
+                // das barras continuam em px do mundo, então nada muda no que é enviado ao Python.
+                // Tudo isso roda só no navegador: não gera tráfego nem uso de memória no servidor.
+                const vp = document.getElementById("viewport");
+                const toolbarEl = document.querySelector(".toolbar");
+                const dicaEl = document.getElementById("dica");
+                const WORLD_W = 2400, WORLD_H = 1600;
+                const Z_MIN = 0.3, Z_MAX = 2.5;
+                const telaEstreita = () => window.innerWidth < 700;
+                const toqueComoPrincipal = window.matchMedia && window.matchMedia("(pointer: coarse)").matches;
+                let view = { scale: telaEstreita() ? 0.75 : 1, panX: 0, panY: 0 };
+                let modoMover = false, areaAmpliada = false;
+
+                const DICA_PADRAO = toqueComoPrincipal
+                    ? "Toque numa barra e arraste para movê-la · ✋ Mover: arrastar a vista e pinçar para zoom · ⤢ Ajustar: enquadrar o diagrama"
+                    : "Arraste as barras para posicioná-las · arraste o fundo para mover a vista · Ctrl + roda do mouse: zoom · ⤢ Ajustar: enquadrar o diagrama";
+                const DICA_MOVER = "Modo Mover ativo: arraste com um dedo para deslocar a vista e pince com dois para zoom. Toque em ✋ Mover de novo para voltar a rolar a página.";
+
+                function alturaVista() {
+                    if (areaAmpliada) return telaEstreita() ? 640 : 900;
+                    return telaEstreita() ? 420 : 600;
+                }
+                function enviarAltura() {
+                    const h = toolbarEl.offsetHeight + vp.offsetHeight + dicaEl.offsetHeight + 4;
+                    window.parent.postMessage({ isStreamlitMessage: true, type: "streamlit:setFrameHeight", height: h }, "*");
+                }
+                function aplicarVista() {
+                    ws.style.transform = `translate(${view.panX}px, ${view.panY}px) scale(${view.scale})`;
+                    document.getElementById("zoomLabel").textContent = Math.round(view.scale * 100) + "%";
+                }
+                // Mantém pelo menos 150 px do mundo dentro da janela (o desenho nunca some por completo)
+                function limitarPan() {
+                    const w = vp.clientWidth, h = vp.clientHeight, m = 150;
+                    view.panX = Math.min(w - m, Math.max(m - WORLD_W * view.scale, view.panX));
+                    view.panY = Math.min(h - m, Math.max(m - WORLD_H * view.scale, view.panY));
+                }
+                // Zoom mantendo fixo o ponto (cx, cy) da janela — o que está sob o cursor/dedos não foge
+                function zoomEm(fator, cx, cy) {
+                    const novo = Math.min(Z_MAX, Math.max(Z_MIN, view.scale * fator));
+                    const wx = (cx - view.panX) / view.scale, wy = (cy - view.panY) / view.scale;
+                    view.scale = novo;
+                    view.panX = cx - wx * novo; view.panY = cy - wy * novo;
+                    limitarPan(); aplicarVista();
+                }
+                function zoomBotao(fator) { zoomEm(fator, vp.clientWidth / 2, vp.clientHeight / 2); }
+                // Converte coordenadas da tela (evento) para coordenadas do mundo
+                function paraMundo(clientX, clientY) {
+                    const r = vp.getBoundingClientRect();
+                    return { x: (clientX - r.left - view.panX) / view.scale, y: (clientY - r.top - view.panY) / view.scale };
+                }
+                function ajustarATela() {
+                    const pts = barras.map(b => [b.x, b.y]);
+                    [...geradores, ...cargas].forEach(c => {
+                        if (c.el && c.el.style.left) pts.push([parseFloat(c.el.style.left), parseFloat(c.el.style.top)]);
+                    });
+                    if (!pts.length) return;
+                    const xs = pts.map(p => p[0]), ys = pts.map(p => p[1]), pad = 100;
+                    const x1 = Math.min(...xs) - pad, x2 = Math.max(...xs) + pad;
+                    const y1 = Math.min(...ys) - pad, y2 = Math.max(...ys) + pad;
+                    const w = vp.clientWidth, h = vp.clientHeight;
+                    view.scale = Math.min(Z_MAX, Math.max(Z_MIN, Math.min(w / (x2 - x1), h / (y2 - y1), 1.5)));
+                    view.panX = (w - (x1 + x2) * view.scale) / 2;
+                    view.panY = (h - (y1 + y2) * view.scale) / 2;
+                    limitarPan(); aplicarVista();
+                }
+                function alternarArea() {
+                    areaAmpliada = !areaAmpliada;
+                    vp.style.height = alturaVista() + "px";
+                    const b = document.getElementById("btnArea");
+                    b.classList.toggle("ativo", areaAmpliada);
+                    b.textContent = areaAmpliada ? "⇕ Reduzir área" : "⇕ Ampliar área";
+                    limitarPan(); aplicarVista(); enviarAltura();
+                }
+                function alternarMover() {
+                    modoMover = !modoMover;
+                    vp.classList.toggle("modo-mover", modoMover);
+                    document.getElementById("btnMover").classList.toggle("ativo", modoMover);
+                    dicaEl.textContent = modoMover ? DICA_MOVER : DICA_PADRAO;
+                }
+
+                // Deslocamento da vista (1 ponteiro) e pinça (2 ponteiros) no fundo do desenho.
+                // Mouse: sempre. Toque: só no modo Mover — fora dele o dedo rola a página.
+                const ponteiros = new Map();
+                let gesto = null;
+                function iniciarGesto() {
+                    const p = [...ponteiros.values()];
+                    if (p.length === 1) {
+                        gesto = { tipo: "pan", x0: p[0].x, y0: p[0].y, panX0: view.panX, panY0: view.panY };
+                    } else if (p.length >= 2) {
+                        const r = vp.getBoundingClientRect();
+                        const mx = (p[0].x + p[1].x) / 2 - r.left, my = (p[0].y + p[1].y) / 2 - r.top;
+                        gesto = { tipo: "pinca", d0: Math.hypot(p[0].x - p[1].x, p[0].y - p[1].y) || 1,
+                                  s0: view.scale, wx: (mx - view.panX) / view.scale, wy: (my - view.panY) / view.scale };
+                    } else {
+                        gesto = null;
+                    }
+                }
+                vp.addEventListener("pointerdown", e => {
+                    if (e.target.closest("#properties-panel")) return;
+                    if (!connectMode) selectElement(null, null);   // toque/clique no fundo desmarca a seleção
+                    const podeMover = e.pointerType === "mouse" ? e.button === 0 : modoMover;
+                    if (!podeMover) return;
+                    try { vp.setPointerCapture(e.pointerId); } catch (_) {}
+                    ponteiros.set(e.pointerId, { x: e.clientX, y: e.clientY });
+                    iniciarGesto();
+                    vp.style.cursor = "grabbing";
+                });
+                vp.addEventListener("pointermove", e => {
+                    if (!ponteiros.has(e.pointerId) || !gesto) return;
+                    ponteiros.set(e.pointerId, { x: e.clientX, y: e.clientY });
+                    const p = [...ponteiros.values()];
+                    if (gesto.tipo === "pan" && p.length === 1) {
+                        view.panX = gesto.panX0 + (p[0].x - gesto.x0);
+                        view.panY = gesto.panY0 + (p[0].y - gesto.y0);
+                    } else if (gesto.tipo === "pinca" && p.length >= 2) {
+                        const r = vp.getBoundingClientRect();
+                        const mx = (p[0].x + p[1].x) / 2 - r.left, my = (p[0].y + p[1].y) / 2 - r.top;
+                        const d = Math.hypot(p[0].x - p[1].x, p[0].y - p[1].y);
+                        view.scale = Math.min(Z_MAX, Math.max(Z_MIN, gesto.s0 * d / gesto.d0));
+                        view.panX = mx - gesto.wx * view.scale;
+                        view.panY = my - gesto.wy * view.scale;
+                    }
+                    limitarPan(); aplicarVista();
+                });
+                function fimPonteiro(e) {
+                    if (!ponteiros.has(e.pointerId)) return;
+                    ponteiros.delete(e.pointerId);
+                    iniciarGesto();          // se sobrou um dedo, continua deslocando a partir dele
+                    if (!ponteiros.size) vp.style.cursor = "";
+                }
+                vp.addEventListener("pointerup", fimPonteiro);
+                vp.addEventListener("pointercancel", fimPonteiro);
+                // Ctrl (ou Cmd) + roda = zoom no ponto do cursor; a roda sozinha continua rolando a página.
+                // A pinça no touchpad do notebook chega como roda + Ctrl, então também funciona.
+                vp.addEventListener("wheel", e => {
+                    if (!e.ctrlKey && !e.metaKey) return;
+                    e.preventDefault();
+                    const r = vp.getBoundingClientRect();
+                    zoomEm(Math.exp(-e.deltaY * 0.0015), e.clientX - r.left, e.clientY - r.top);
+                }, { passive: false });
+                window.addEventListener("resize", () => {
+                    vp.style.height = alturaVista() + "px"; limitarPan(); aplicarVista(); enviarAltura();
+                });
+
+                vp.style.height = alturaVista() + "px";
+                dicaEl.textContent = DICA_PADRAO;
+                aplicarVista();
+                setInterval(enviarAltura, 500);
+                // =========================================================================
 
                 function initSlack() {
                     const b = { id: busCounter++, type: 'slack', x: 150, y: 300, v: 1.06, theta: 0, bsh_bus: 0, rotState: 0, el: null };
@@ -1814,7 +1996,14 @@ if st.session_state.pagina == "simulacao":
                 }
 
                 function addBarra() {
-                    const b = { id: busCounter++, type: 'PQ', x: 400, y: 300, bsh_bus: 0, rotState: 0, v: 1.0, theta: 0, el: null };
+                    // Nova barra no centro da parte visível (com zoom/deslocamento ela não nasce fora da tela).
+                    // Pequeno deslocamento em cascata para barras seguidas não ficarem empilhadas.
+                    const cx = (vp.clientWidth / 2 - view.panX) / view.scale;
+                    const cy = (vp.clientHeight / 2 - view.panY) / view.scale;
+                    const desloc = (barras.length % 5) * 30;
+                    const x = Math.max(30, Math.min(WORLD_W - 30, cx + desloc));
+                    const y = Math.max(30, Math.min(WORLD_H - 30, cy + desloc));
+                    const b = { id: busCounter++, type: 'PQ', x: x, y: y, bsh_bus: 0, rotState: 0, v: 1.0, theta: 0, el: null };
                     barras.push(b); renderBarra(b); selectElement(b, 'barra');
                 }
 
@@ -1847,7 +2036,7 @@ if st.session_state.pagina == "simulacao":
                     const el = document.createElement("div"); el.className = "component";
                     el.innerHTML = `<div class="gerador-circulo">G</div>`;
                     ws.appendChild(el); g.el = el;
-                    el.addEventListener("mousedown", e => { e.stopPropagation(); selectElement(g, 'gerador'); });
+                    el.addEventListener("pointerdown", e => { e.stopPropagation(); selectElement(g, 'gerador'); });
                 }
                 function renderCarga(c) {
                     if (c.el) c.el.remove();
@@ -1855,7 +2044,7 @@ if st.session_state.pagina == "simulacao":
                     const el = document.createElement("div"); el.className = "component";
                     el.innerHTML = `<div class="carga-seta"></div>`;
                     ws.appendChild(el); c.el = el;
-                    el.addEventListener("mousedown", e => { e.stopPropagation(); selectElement(c, 'carga'); });
+                    el.addEventListener("pointerdown", e => { e.stopPropagation(); selectElement(c, 'carga'); });
                 }
                 function positionAttached(item, barra, tipo) {
                     const offset = 140; let cx = barra.x, cy = barra.y; const s = barra.rotState || 0;
@@ -1922,8 +2111,12 @@ if st.session_state.pagina == "simulacao":
                     if (!l.elPath) {
                         l.elPath = document.createElementNS("http://www.w3.org/2000/svg", "path");
                         l.elPath.setAttribute("class", "wire-path");
-                        l.elPath.addEventListener("mousedown", e => { e.stopPropagation(); selectElement(l, 'linha'); });
+                        l.elPath.addEventListener("pointerdown", e => { e.stopPropagation(); selectElement(l, 'linha'); });
                         svg.appendChild(l.elPath);
+                        l.elHit = document.createElementNS(SVG_NS, "path");
+                        l.elHit.setAttribute("class", "hit-path");
+                        l.elHit.addEventListener("pointerdown", e => { e.stopPropagation(); selectElement(l, 'linha'); });
+                        svg.appendChild(l.elHit);
                         l.elSymbol = document.createElementNS("http://www.w3.org/2000/svg", "g");
                         svg.appendChild(l.elSymbol);
                         // Grupo dos shunts da linha fora do grupo rotacionado → símbolos sempre verticais
@@ -1935,6 +2128,7 @@ if st.session_state.pagina == "simulacao":
                         ws.appendChild(l.elLabel);
                     }
                     l.elPath.setAttribute("d", `M ${b1.x} ${b1.y} L ${b2.x} ${b2.y}`);
+                    l.elHit.setAttribute("d", `M ${b1.x} ${b1.y} L ${b2.x} ${b2.y}`);
                     const midX = (b1.x+b2.x)/2, midY = (b1.y+b2.y)/2;
                     const dx = b2.x-b1.x, dy = b2.y-b1.y;
                     const angle = Math.atan2(dy, dx)*180/Math.PI;
@@ -1974,13 +2168,16 @@ if st.session_state.pagina == "simulacao":
                             lado = dxDescendo > 0 ? -1 : 1;
                         }
                         const texto = "j" + fmtNum(bshVal/2);
-                        // Obstáculos já desenhados (rótulos, corpo das barras, geradores, cargas) para evitar sobreposição
+                        // Obstáculos já desenhados (rótulos, corpo das barras, geradores, cargas) para evitar sobreposição.
+                        // getBoundingClientRect devolve medidas na tela (já com zoom): divide-se pela escala
+                        // para voltar às coordenadas do mundo, onde os shunts são posicionados.
                         const wsR = ws.getBoundingClientRect();
+                        const esc = view.scale;
                         const rotulos = Array.from(ws.querySelectorAll(".label, .barra-linha, .gerador-circulo, .carga-seta"))
                             .filter(e => e !== l.elLabel && e.offsetParent !== null)
                             .map(e => { const r = e.getBoundingClientRect();
-                                        return { x1: r.left - wsR.left - 4, x2: r.right - wsR.left + 4,
-                                                 y1: r.top - wsR.top - 4,   y2: r.bottom - wsR.top + 4 }; });
+                                        return { x1: (r.left - wsR.left) / esc - 4, x2: (r.right - wsR.left) / esc + 4,
+                                                 y1: (r.top - wsR.top) / esc - 4,   y2: (r.bottom - wsR.top) / esc + 4 }; });
                         const caixaShunt = (px, py) => {
                             const sx = ingreme ? px + lado*22 : px;
                             const xt = sx + lado*(13 + 6.5*texto.length);
@@ -2032,8 +2229,12 @@ if st.session_state.pagina == "simulacao":
                     if (!t.elPath) {
                         t.elPath = document.createElementNS("http://www.w3.org/2000/svg", "path");
                         t.elPath.setAttribute("class", "trafo-path");
-                        t.elPath.addEventListener("mousedown", e => { e.stopPropagation(); selectElement(t, 'trafo'); });
+                        t.elPath.addEventListener("pointerdown", e => { e.stopPropagation(); selectElement(t, 'trafo'); });
                         svg.appendChild(t.elPath);
+                        t.elHit = document.createElementNS(SVG_NS, "path");
+                        t.elHit.setAttribute("class", "hit-path");
+                        t.elHit.addEventListener("pointerdown", e => { e.stopPropagation(); selectElement(t, 'trafo'); });
+                        svg.appendChild(t.elHit);
                         t.elSymbol = document.createElementNS("http://www.w3.org/2000/svg", "g");
                         svg.appendChild(t.elSymbol);
                         t.elLabel = document.createElement("div");
@@ -2041,6 +2242,7 @@ if st.session_state.pagina == "simulacao":
                         ws.appendChild(t.elLabel);
                     }
                     t.elPath.setAttribute("d", `M ${bk.x} ${bk.y} L ${bm.x} ${bm.y}`);
+                    t.elHit.setAttribute("d", `M ${bk.x} ${bk.y} L ${bm.x} ${bm.y}`);
                     const midX = (bk.x+bm.x)/2, midY = (bk.y+bm.y)/2;
                     const dx = bm.x-bk.x, dy = bm.y-bk.y;
                     const angle = Math.atan2(dy,dx)*180/Math.PI;
@@ -2079,27 +2281,33 @@ if st.session_state.pagina == "simulacao":
                     cargas.forEach(c => positionAttached(c, barras.find(b => b.id===c.barraId), 'carga'));
                 }
 
+                // Arraste de barras com Pointer Events: o mesmo código atende mouse, dedo e caneta.
+                // setPointerCapture mantém o arraste mesmo que o dedo/cursor saia da barra.
+                // Os ouvintes ficam no próprio elemento (antes ficavam no document e se acumulavam
+                // a cada redesenho da barra).
                 function makeDraggable(el, item, type) {
-                    let drag = false, sx, sy;
-                    el.addEventListener('mousedown', e => {
-                        e.stopPropagation(); drag = true; sx = e.clientX-item.x; sy = e.clientY-item.y;
-                        if (connectMode) {
-                            handleBarraClick(item);
-                        } else {
-                            selectElement(item, 'barra');
-                        }
+                    let arrastando = false, off = null;
+                    el.addEventListener('pointerdown', e => {
+                        e.stopPropagation();
+                        if (e.pointerType === 'mouse' && e.button !== 0) return;
+                        if (connectMode) { handleBarraClick(item); return; }
+                        selectElement(item, 'barra');
+                        const p = paraMundo(e.clientX, e.clientY);
+                        off = { x: p.x - item.x, y: p.y - item.y };
+                        arrastando = true;
+                        try { el.setPointerCapture(e.pointerId); } catch (_) {}
                     });
-                    document.addEventListener('mousemove', e => {
-                        if (!drag) return;
-                        const r = ws.getBoundingClientRect();
-                        item.x = Math.max(30, Math.min(r.width-30,  e.clientX-sx));
-                        item.y = Math.max(30, Math.min(r.height-30, e.clientY-sy));
+                    el.addEventListener('pointermove', e => {
+                        if (!arrastando) return;
+                        const p = paraMundo(e.clientX, e.clientY);
+                        item.x = Math.max(30, Math.min(WORLD_W - 30, p.x - off.x));
+                        item.y = Math.max(30, Math.min(WORLD_H - 30, p.y - off.y));
                         el.style.left = item.x+"px"; el.style.top = item.y+"px"; updateAllWires();
                     });
-                    document.addEventListener('mouseup', () => drag = false);
+                    const fim = () => { arrastando = false; };
+                    el.addEventListener('pointerup', fim);
+                    el.addEventListener('pointercancel', fim);
                 }
-
-                ws.addEventListener('mousedown', () => { if (!connectMode) selectElement(null, null); });
 
                 function selectElement(item, type) {
                     selectedElement = item; selectedType = type;
@@ -2190,11 +2398,11 @@ if st.session_state.pagina == "simulacao":
                     if (selectedType === 'barra') {
                         if (selectedElement.type === 'slack') { alert("A Barra Slack não pode ser excluída!"); return; }
                         linhas.filter(l => l.b1===selectedElement.id || l.b2===selectedElement.id).forEach(l => {
-                            if(l.elPath) l.elPath.remove(); if(l.elLabel) l.elLabel.remove(); if(l.elSymbol) l.elSymbol.remove(); if(l.elShunts) l.elShunts.remove();
+                            if(l.elPath) l.elPath.remove(); if(l.elHit) l.elHit.remove(); if(l.elLabel) l.elLabel.remove(); if(l.elSymbol) l.elSymbol.remove(); if(l.elShunts) l.elShunts.remove();
                         });
                         linhas = linhas.filter(l => l.b1!==selectedElement.id && l.b2!==selectedElement.id);
                         transformadores.filter(t => t.bk===selectedElement.id || t.bm===selectedElement.id).forEach(t => {
-                            if(t.elPath) t.elPath.remove(); if(t.elLabel) t.elLabel.remove(); if(t.elSymbol) t.elSymbol.remove();
+                            if(t.elPath) t.elPath.remove(); if(t.elHit) t.elHit.remove(); if(t.elLabel) t.elLabel.remove(); if(t.elSymbol) t.elSymbol.remove();
                         });
                         transformadores = transformadores.filter(t => t.bk!==selectedElement.id && t.bm!==selectedElement.id);
                         geradores.filter(g => g.barraId===selectedElement.id).forEach(g => { g.el.remove(); g.elWire.remove(); });
@@ -2206,12 +2414,14 @@ if st.session_state.pagina == "simulacao":
                         barras = barras.filter(b => b.id!==selectedElement.id);
                     } else if (selectedType === 'linha') {
                         if(selectedElement.elPath) selectedElement.elPath.remove();
+                        if(selectedElement.elHit) selectedElement.elHit.remove();
                         if(selectedElement.elLabel) selectedElement.elLabel.remove();
                         if(selectedElement.elSymbol) selectedElement.elSymbol.remove();
                         if(selectedElement.elShunts) selectedElement.elShunts.remove();
                         linhas = linhas.filter(l => l.id!==selectedElement.id);
                     } else if (selectedType === 'trafo') {
                         if(selectedElement.elPath) selectedElement.elPath.remove();
+                        if(selectedElement.elHit) selectedElement.elHit.remove();
                         if(selectedElement.elLabel) selectedElement.elLabel.remove();
                         if(selectedElement.elSymbol) selectedElement.elSymbol.remove();
                         transformadores = transformadores.filter(t => t.id!==selectedElement.id);
@@ -2463,12 +2673,18 @@ if st.session_state.pagina == "simulacao":
                     })
                 st.dataframe(pd.DataFrame(hist_conv), hide_index=True)
 
-                st.markdown("---")
-                st.markdown("### 🔹 Fluxos de Potência nos Ramos")
                 from mismatch import calc_power as _calc_power
                 P_f, Q_f = _calc_power(V_final, theta_final, Ybus)
                 res_ramos = []
+                res_correntes = []
                 P_perda = 0.0   # soma numérica (sem arredondamento) das perdas ativas nos ramos
+
+                def _linha_corrente(rotulo, I_km, I_mk):
+                    return {
+                        "Ramo": rotulo,
+                        "|I_km| (pu)": f"{abs(I_km):.4f}", "∠I_km (°)": f"{np.degrees(np.angle(I_km)):.4f}",
+                        "|I_mk| (pu)": f"{abs(I_mk):.4f}", "∠I_mk (°)": f"{np.degrees(np.angle(I_mk)):.4f}",
+                    }
 
                 for l in dados_para_calculo.get('linhas', []):
                     ki = id_map[l['de']]; mi = id_map[l['para']]
@@ -2483,6 +2699,7 @@ if st.session_state.pagina == "simulacao":
                         S_km = Vk * np.conj(I_km); S_mk = Vm * np.conj(I_mk)
                         perda = S_km + S_mk
                         P_perda += float(perda.real)
+                        res_correntes.append(_linha_corrente(f"L: B{l['de']} → B{l['para']}", I_km, I_mk))
                         res_ramos.append({
                             "Ramo": f"L: B{l['de']} → B{l['para']}",
                             "P_km (pu)": f"{S_km.real:.4f}", "Q_km (pu)": f"{S_km.imag:.4f}",
@@ -2502,6 +2719,7 @@ if st.session_state.pagina == "simulacao":
                         S_km = Vk * np.conj(I_km); S_mk = Vm * np.conj(I_mk)
                         perda = S_km + S_mk
                         P_perda += float(perda.real)
+                        res_correntes.append(_linha_corrente(f"T (a={a}): B{t['de']} → B{t['para']}", I_km, I_mk))
                         res_ramos.append({
                             "Ramo": f"T (a={a}): B{t['de']} → B{t['para']}",
                             "P_km (pu)": f"{S_km.real:.4f}", "Q_km (pu)": f"{S_km.imag:.4f}",
@@ -2509,6 +2727,16 @@ if st.session_state.pagina == "simulacao":
                             "Perda P (pu)": f"{perda.real:.4f}", "Perda Q (pu)": f"{perda.imag:.4f}",
                         })
 
+                # Correntes antes dos fluxos: mesma ordem da Teoria (S_km* = E_k* · I_km)
+                st.markdown("---")
+                st.markdown("### 🔹 Correntes nos Ramos")
+                if res_correntes:
+                    st.dataframe(pd.DataFrame(res_correntes), hide_index=True)
+                    st.caption("**I_km**: corrente que sai da barra k pelo ramo  |  **I_mk**: corrente que sai da barra m  |  "
+                               "valores em pu, ângulos em relação à referência angular da Slack")
+
+                st.markdown("---")
+                st.markdown("### 🔹 Fluxos de Potência nos Ramos")
                 if res_ramos:
                     st.dataframe(pd.DataFrame(res_ramos), hide_index=True)
                     st.caption("**L** = Linha  |  **T** = Transformador  |  **P_km**: fluxo saindo de k  |  **P_mk**: fluxo saindo de m")
