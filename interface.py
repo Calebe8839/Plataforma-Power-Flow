@@ -46,14 +46,15 @@ st.markdown("""
         font-size: clamp(40px, 8vw, 72px);
         font-weight: 900;
         text-align: center;
-        color: #111;
+        color: inherit;          /* segue o tema: escuro no claro, claro no escuro */
         letter-spacing: -2px;
         margin-bottom: 6px;
         line-height: 1;
     }
     .pf-main-sub {
         text-align: center;
-        color: #666;
+        color: inherit;
+        opacity: 0.72;           /* cinza relativo ao tema, legível nos dois modos */
         font-size: 16px;
         margin-bottom: 52px;
     }
@@ -942,7 +943,7 @@ CSS = """
   text-transform:uppercase;letter-spacing:.3px;}
 figure.teo-fig{margin:1.4rem auto 1.6rem auto;text-align:center;}
 figure.teo-fig img{width:100%;height:auto;border-radius:14px;border:1px solid #e0e0e0;background:#fff;}
-figure.teo-fig figcaption{font-size:13px;color:#757575;margin-top:8px;line-height:1.4;}
+figure.teo-fig figcaption{font-size:13px;color:inherit;opacity:.7;margin-top:8px;line-height:1.4;}
 </style>
 """
 
