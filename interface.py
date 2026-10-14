@@ -5,6 +5,7 @@ import pandas as pd
 import os
 import re
 import base64
+import hashlib
 from pathlib import Path
 
 try:
@@ -24,6 +25,23 @@ def formatar_vetor_latex(vec, precisao=4):
 def formatar_ybus(ybus):
     df = pd.DataFrame(ybus)
     return df.map(lambda c: f"{c.real:.4f} {c.imag:+.4f}j")
+
+def _assinatura_tabelas(*dfs):
+    """Impressão digital do conteúdo das tabelas do Modo Tabela. Serve para avisar
+    o estudante quando ele editou os dados depois do último cálculo."""
+    h = hashlib.md5()
+    for df in dfs:
+        h.update(df.to_csv(index=False).encode("utf-8"))
+    return h.hexdigest()
+
+def _df_rotulado(matriz, rotulos_linhas, rotulos_colunas, precisao=4):
+    """Matriz formatada com rótulos de barra. Se as dimensões não baterem com os
+    rótulos (motor diferente do esperado), mantém os índices numéricos em vez de quebrar."""
+    df = pd.DataFrame(matriz).map(lambda x: f"{x:.{precisao}f}")
+    if df.shape == (len(rotulos_linhas), len(rotulos_colunas)):
+        df.index = rotulos_linhas
+        df.columns = rotulos_colunas
+    return df
 
 # ======================================================
 # CONFIGURAÇÃO DA PÁGINA
@@ -1570,6 +1588,9 @@ if st.session_state.pagina == "simulacao":
             }
         )
 
+        # Assinatura do conteúdo atual das tabelas (detecta edição após o cálculo)
+        assinatura_atual = _assinatura_tabelas(df_barras_editado, df_linhas_editado, df_trafos_editado)
+
         col_btn1, col_btn2, col_btn3 = st.columns([1, 1, 1])
         with col_btn2:
             if st.button("▶ EXECUTAR FLUXO DE POTÊNCIA", use_container_width=True, type="primary"):
@@ -1607,7 +1628,17 @@ if st.session_state.pagina == "simulacao":
                         "r": float(row["R (pu)"]), "x": float(row["X (pu)"]),
                         "a": float(row["Tap a (pu)"])
                     })
-                dados_para_calculo = {"barras": barras_list, "linhas": linhas_list, "transformadores": trafos_list}
+                # Os dados ficam guardados na sessão: assim os resultados não somem
+                # quando o estudante escolhe outra iteração ou muda um parâmetro.
+                st.session_state["dados_tabela"] = {"barras": barras_list, "linhas": linhas_list, "transformadores": trafos_list}
+                st.session_state["assinatura_tabela"] = assinatura_atual
+
+        if st.session_state.get("dados_tabela") is not None:
+            if st.session_state.get("assinatura_tabela") != assinatura_atual:
+                st.warning("⚠️ Os dados das tabelas foram alterados depois do último cálculo. "
+                           "Os resultados abaixo correspondem aos dados anteriores — clique em "
+                           "**▶ EXECUTAR FLUXO DE POTÊNCIA** para atualizar.")
+            dados_para_calculo = st.session_state["dados_tabela"]
 
     # ============================================================
     # MODO 2 — CIRCUITO (CANVAS)
@@ -1675,7 +1706,12 @@ if st.session_state.pagina == "simulacao":
 
                 let barras = [], linhas = [], transformadores = [];
                 let geradores = [], cargas = [];
-                let idCounter = 1;
+                // Numeração das barras separada dos demais elementos: as barras ficam
+                // 1, 2, 3... na ordem de criação, e é esse número que o estudante vê em
+                // todas as tabelas de resultado. Geradores, cargas, linhas e trafos usam
+                // IDs internos a partir de 1001 (nunca exibidos como número de barra).
+                let busCounter = 1;
+                let idCounter = 1001;
                 let selectedElement = null, selectedType = null;
                 let connectMode = false, connectKind = null, connectStartBarra = null;
 
@@ -1689,7 +1725,7 @@ if st.session_state.pagina == "simulacao":
                 const BUS_SHUNT_AO_LONGO = 30, BUS_SHUNT_DEGRAU = 40;
 
                 function initSlack() {
-                    const b = { id: idCounter++, type: 'slack', x: 150, y: 300, v: 1.06, theta: 0, bsh_bus: 0, rotState: 0, el: null };
+                    const b = { id: busCounter++, type: 'slack', x: 150, y: 300, v: 1.06, theta: 0, bsh_bus: 0, rotState: 0, el: null };
                     barras.push(b); renderBarra(b);
                 }
                 initSlack();
@@ -1778,7 +1814,7 @@ if st.session_state.pagina == "simulacao":
                 }
 
                 function addBarra() {
-                    const b = { id: idCounter++, type: 'PQ', x: 400, y: 300, bsh_bus: 0, rotState: 0, v: 1.0, theta: 0, el: null };
+                    const b = { id: busCounter++, type: 'PQ', x: 400, y: 300, bsh_bus: 0, rotState: 0, v: 1.0, theta: 0, el: null };
                     barras.push(b); renderBarra(b); selectElement(b, 'barra');
                 }
 
@@ -2254,8 +2290,9 @@ if st.session_state.pagina == "simulacao":
             st.stop()
 
         with st.spinner("Solucionando pelo Método de Newton-Raphson..."):
-            id_map       = {b['id']: idx   for idx, b in enumerate(dados_para_calculo['barras'])}
-            id_map_label = {b['id']: idx+1 for idx, b in enumerate(dados_para_calculo['barras'])}
+            # id_map: número da barra (o mesmo que o estudante vê no desenho/tabela) → posição interna 0..n-1.
+            # A posição interna é usada só pelo motor; tudo o que é exibido usa o número da barra.
+            id_map   = {b['id']: idx for idx, b in enumerate(dados_para_calculo['barras'])}
             tipo_map = {'slack': 'Slack', 'pv': 'PV', 'pq': 'PQ'}
 
             backend_buses = []
@@ -2303,8 +2340,7 @@ if st.session_state.pagina == "simulacao":
                 for b_orig in dados_para_calculo['barras']:
                     idx = id_map[b_orig['id']]
                     res_barras.append({
-                        "Barra": id_map_label[b_orig['id']],
-                        "ID Original": b_orig['id'],
+                        "Barra": b_orig['id'],
                         "Tipo": str(b_orig['tipo']).upper(),
                         "Módulo |V| (pu)": f"{V_final[idx]:.4f}",
                         "Ângulo θ (°)": f"{np.degrees(theta_final[idx]):.4f}",
@@ -2316,7 +2352,7 @@ if st.session_state.pagina == "simulacao":
                 st.caption(f"*(Processamento interno em p.u., S_base = {base_mva} MVA)*")
 
                 st.markdown("### 🔹 Matriz de Admitância Nodal ($Y_{bus}$)")
-                rotulos_y = [f"Barra {id_map_label[b['id']]}" for b in dados_para_calculo['barras']]
+                rotulos_y = [f"Barra {b['id']}" for b in dados_para_calculo['barras']]
                 df_ybus = formatar_ybus(Ybus)
                 df_ybus.columns = rotulos_y
                 df_ybus.index   = rotulos_y
@@ -2366,32 +2402,39 @@ if st.session_state.pagina == "simulacao":
                         dados_iter = next(s for s in it_validas if s['nu'] == iter_selecionada)
                         nu = dados_iter['nu']
 
+                        # Rótulos pelo número da barra. Linhas = equações (P, Q); colunas = variáveis (θ, |V|).
+                        barras_pvpq = [dados_para_calculo['barras'][i]['id'] for i in pvpq]
+                        barras_pq   = [dados_para_calculo['barras'][i]['id'] for i in pq_index]
+                        lin_P  = [f"P(B{bid})"   for bid in barras_pvpq]
+                        lin_Q  = [f"Q(B{bid})"   for bid in barras_pq]
+                        col_th = [f"θ(B{bid})"   for bid in barras_pvpq]
+                        col_V  = [f"|V|(B{bid})" for bid in barras_pq]
+
                         st.markdown(f"#### 1. Derivadas Parciais — iteração {nu}")
+                        st.caption("Cada elemento é a derivada da potência da **linha** em relação à variável da **coluna**.")
                         col_j1, col_j2 = st.columns(2)
                         with col_j1:
                             if dados_iter['H'].size > 0:
                                 st.markdown("**H ($\\partial P / \\partial \\theta$):**")
-                                st.dataframe(pd.DataFrame(dados_iter['H']).map(lambda x: f"{x:.4f}"))
+                                st.dataframe(_df_rotulado(dados_iter['H'], lin_P, col_th))
                             if dados_iter['M'].size > 0:
                                 st.markdown("**M ($\\partial Q / \\partial \\theta$):**")
-                                st.dataframe(pd.DataFrame(dados_iter['M']).map(lambda x: f"{x:.4f}"))
+                                st.dataframe(_df_rotulado(dados_iter['M'], lin_Q, col_th))
                         with col_j2:
                             if dados_iter['N'].size > 0:
                                 st.markdown("**N ($\\partial P / \\partial V$):**")
-                                st.dataframe(pd.DataFrame(dados_iter['N']).map(lambda x: f"{x:.4f}"))
+                                st.dataframe(_df_rotulado(dados_iter['N'], lin_P, col_V))
                             if dados_iter['L'].size > 0:
                                 st.markdown("**L ($\\partial Q / \\partial V$):**")
-                                st.dataframe(pd.DataFrame(dados_iter['L']).map(lambda x: f"{x:.4f}"))
+                                st.dataframe(_df_rotulado(dados_iter['L'], lin_Q, col_V))
 
                         st.markdown(f"#### 2. Jacobiana Completa $J^{{({nu})}}$")
-                        barras_pvpq = [dados_para_calculo['barras'][i]['id'] for i in pvpq]
-                        barras_pq   = [dados_para_calculo['barras'][i]['id'] for i in pq_index]
-                        rotulos_j   = ([f"Δθ(B{bid})" for bid in barras_pvpq] +
-                                       [f"ΔV(B{bid})" for bid in barras_pq])
-                        df_jacob = pd.DataFrame(dados_iter['J']).map(lambda x: f"{x:.4f}")
-                        df_jacob.columns = rotulos_j
-                        df_jacob.index   = rotulos_j
-                        st.dataframe(df_jacob)
+                        linhas_j  = ([f"ΔP(B{bid})" for bid in barras_pvpq] +
+                                     [f"ΔQ(B{bid})" for bid in barras_pq])
+                        colunas_j = ([f"Δθ(B{bid})" for bid in barras_pvpq] +
+                                     [f"ΔV(B{bid})" for bid in barras_pq])
+                        st.dataframe(_df_rotulado(dados_iter['J'], linhas_j, colunas_j))
+                        st.caption("Linhas = resíduos (equações ΔP e ΔQ)  |  Colunas = correções das variáveis de estado (Δθ e ΔV)")
 
                         st.markdown("#### 3. Correções e Novo Estado")
                         col_d1, col_d2 = st.columns(2)
@@ -2425,6 +2468,7 @@ if st.session_state.pagina == "simulacao":
                 from mismatch import calc_power as _calc_power
                 P_f, Q_f = _calc_power(V_final, theta_final, Ybus)
                 res_ramos = []
+                P_perda = 0.0   # soma numérica (sem arredondamento) das perdas ativas nos ramos
 
                 for l in dados_para_calculo.get('linhas', []):
                     ki = id_map[l['de']]; mi = id_map[l['para']]
@@ -2438,6 +2482,7 @@ if st.session_state.pagina == "simulacao":
                         I_mk = y_s * (Vm - Vk) + b_sh * Vm
                         S_km = Vk * np.conj(I_km); S_mk = Vm * np.conj(I_mk)
                         perda = S_km + S_mk
+                        P_perda += float(perda.real)
                         res_ramos.append({
                             "Ramo": f"L: B{l['de']} → B{l['para']}",
                             "P_km (pu)": f"{S_km.real:.4f}", "Q_km (pu)": f"{S_km.imag:.4f}",
@@ -2456,6 +2501,7 @@ if st.session_state.pagina == "simulacao":
                         I_mk = y_km * Vm - a * y_km * Vk
                         S_km = Vk * np.conj(I_km); S_mk = Vm * np.conj(I_mk)
                         perda = S_km + S_mk
+                        P_perda += float(perda.real)
                         res_ramos.append({
                             "Ramo": f"T (a={a}): B{t['de']} → B{t['para']}",
                             "P_km (pu)": f"{S_km.real:.4f}", "Q_km (pu)": f"{S_km.imag:.4f}",
@@ -2469,24 +2515,43 @@ if st.session_state.pagina == "simulacao":
 
                 st.markdown("---")
                 st.markdown("### 🔹 Balanço de Potência do Sistema")
-                P_ger_total = sum((b.get('p_ger', 0.0) / divisor_potencia) for b in dados_para_calculo['barras'])
-                Q_ger_total = sum((b.get('q_ger', 0.0) / divisor_potencia) for b in dados_para_calculo['barras'])
+                # Geração por barra (p.u.). Onde a geração é dado de entrada, usa o valor
+                # especificado; onde é incógnita (subsistema 2), usa a injeção calculada
+                # pelo estado final:  Pg = P_inj + Pc  e  Qg = Q_inj + Qc.
+                #   Slack: Pg e Qg calculados  |  PV: Pg especificado, Qg calculado  |  PQ: ambos especificados
+                Pg_barras, Qg_barras = [], []
+                for i, b in enumerate(dados_para_calculo['barras']):
+                    tipo_b = backend_buses[i]['type']
+                    pc = b.get('p_carga', 0.0) / divisor_potencia
+                    qc = b.get('q_carga', 0.0) / divisor_potencia
+                    if tipo_b == 'Slack':
+                        Pg_barras.append(float(P_f[i]) + pc)
+                    else:
+                        Pg_barras.append(b.get('p_ger', 0.0) / divisor_potencia)
+                    if tipo_b in ('Slack', 'PV'):
+                        Qg_barras.append(float(Q_f[i]) + qc)
+                    else:
+                        Qg_barras.append(b.get('q_ger', 0.0) / divisor_potencia)
+
+                idx_slack   = next(i for i, b in enumerate(backend_buses) if b['type'] == 'Slack')
+                P_ger_total = sum(Pg_barras)
+                Q_ger_total = sum(Qg_barras)
                 P_car_total = sum((b.get('p_carga', 0.0) / divisor_potencia) for b in dados_para_calculo['barras'])
                 Q_car_total = sum((b.get('q_carga', 0.0) / divisor_potencia) for b in dados_para_calculo['barras'])
-                P_slack     = float(P_f[next(i for i, b in enumerate(backend_buses) if b['type'] == 'Slack')])
-                Q_slack     = float(Q_f[next(i for i, b in enumerate(backend_buses) if b['type'] == 'Slack')])
-                P_perda     = sum(float(r["Perda P (pu)"]) for r in res_ramos) if res_ramos else 0.0
 
                 col_bal1, col_bal2, col_bal3 = st.columns(3)
                 with col_bal1:
-                    st.metric("Geração Total P (pu)", f"{P_ger_total + P_slack:.4f}")
-                    st.metric("Geração Total Q (pu)", f"{Q_ger_total + Q_slack:.4f}")
+                    st.metric("Geração Total P (pu)", f"{P_ger_total:.4f}")
+                    st.metric("Geração Total Q (pu)", f"{Q_ger_total:.4f}")
                 with col_bal2:
                     st.metric("Carga Total P (pu)",   f"{P_car_total:.4f}")
                     st.metric("Carga Total Q (pu)",   f"{Q_car_total:.4f}")
                 with col_bal3:
                     st.metric("Perdas P nos Ramos (pu)", f"{P_perda:.4f}")
-                    st.metric("Injeção Slack P (pu)",    f"{P_slack:.4f}")
+                    st.metric("Geração na Slack P (pu)", f"{Pg_barras[idx_slack]:.4f}")
+                st.caption("Pg da Slack e Qg das barras Slack e PV são calculados a partir do estado final "
+                           "(subsistema 2); os demais valores de geração são os especificados. "
+                           f"Fechamento do balanço ativo: Pg − Pc − Perdas = {P_ger_total - P_car_total - P_perda:.2e} pu.")
 
             except Exception as e:
                 st.error(f"❌ Erro durante a simulação: {e}")
