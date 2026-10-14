@@ -837,16 +837,45 @@ _MIMES = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
           ".svg": "image/svg+xml", ".webp": "image/webp", ".gif": "image/gif"}
 
 
+def _localizar_asset(nome: str):
+    """Procura assets/<nome>; se não achar o nome exato, aceita diferença de
+    maiúsculas/minúsculas (ex.: Newton_Raphson.JPG). Retorna o Path ou None."""
+    caminho = ASSETS_DIR / nome
+    if caminho.is_file():
+        return caminho
+    if ASSETS_DIR.is_dir():
+        for arq in ASSETS_DIR.iterdir():
+            if arq.is_file() and arq.name.lower() == nome.lower():
+                return arq
+    return None
+
+
+def _diagnostico_assets(nome: str) -> str:
+    """Texto curto dizendo o que existe de fato na pasta assets/ do servidor."""
+    if not ASSETS_DIR.is_dir():
+        return f"pasta não encontrada: {ASSETS_DIR}"
+    nomes = sorted(a.name for a in ASSETS_DIR.iterdir())
+    return f"esperado '{nome}'; em assets/: {', '.join(nomes) if nomes else '(vazia)'}"
+
+
 @st.cache_data(show_spinner=False)
+def _ler_uri(caminho: str, modificado_em: float) -> str:
+    # modificado_em entra na chave do cache: um arquivo novo ou trocado invalida o cache.
+    p = Path(caminho)
+    mime = _MIMES.get(p.suffix.lower(), "application/octet-stream")
+    return f"data:{mime};base64," + base64.b64encode(p.read_bytes()).decode("ascii")
+
+
 def _uri_arquivo(nome: str):
     """Lê assets/<nome> e devolve um data-URI para uso dentro de HTML próprio.
-    Retorna None (e registra nos logs) se o arquivo não existir."""
-    caminho = ASSETS_DIR / nome
-    if not caminho.exists():
-        print(f"[PowerFlow] imagem não encontrada: {caminho}")
+    Retorna None (e registra nos logs) se o arquivo não existir.
+    A verificação de existência NÃO é cacheada: se a imagem subir depois,
+    ela aparece no próximo carregamento, sem precisar reiniciar o app."""
+    caminho = _localizar_asset(nome)
+    if caminho is None:
+        print(f"[PowerFlow] imagem não encontrada — {_diagnostico_assets(nome)}")
         return None
-    mime = _MIMES.get(caminho.suffix.lower(), "application/octet-stream")
-    return f"data:{mime};base64," + base64.b64encode(caminho.read_bytes()).decode("ascii")
+    return _ler_uri(str(caminho), caminho.stat().st_mtime)
 
 
 @st.cache_data(show_spinner=False)
@@ -873,7 +902,7 @@ def _foto(arquivo: str, legenda: str, largura_max: int = 760, alt: str = None):
     um aviso discreto em vez de deixar um espaço vazio."""
     uri = _uri_arquivo(arquivo)
     if uri is None:
-        st.caption(f"⚠️ Figura indisponível: {arquivo}")
+        st.caption(f"⚠️ Figura indisponível — {_diagnostico_assets(arquivo)}")
         return
     st.markdown(
         f'<figure class="teo-fig"><img src="{uri}" alt="{alt or legenda}" style="max-width:{largura_max}px"/>'
