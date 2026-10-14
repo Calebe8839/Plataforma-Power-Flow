@@ -154,8 +154,9 @@ if st.session_state.pagina == "tutorial":
 # Conteúdo conceitual, sem exemplos numéricos resolvidos: a resolução de
 # exercícios fica sob mediação do professor. As seções "Para refletir"
 # trazem perguntas abertas, sem gabarito.
-# Figuras em SVG geradas por código; a caricatura do MNR é lida de
-# assets/newton_raphson.jpg (se o arquivo faltar, o card mostra 📐).
+# Figuras em SVG geradas por código; imagens próprias (fotos, caricaturas)
+# ficam na pasta assets/ ao lado deste arquivo — ver _uri_arquivo e _foto.
+# Se um arquivo de assets/ faltar, o card mostra um ícone e a figura mostra um aviso.
 # ======================================================
 
 # ------------------------------------------------------
@@ -819,6 +820,8 @@ def fig_convergencia():
 # ------------------------------------------------------
 # TEORIA SEP — Conteúdo e layout
 # ------------------------------------------------------
+# Pasta de imagens próprias, ao lado deste arquivo. Use nomes minúsculos,
+# sem acento e sem espaço: o servidor (Linux) diferencia maiúsculas.
 ASSETS_DIR = Path(__file__).resolve().parent / "assets"
 IMG_NEWTON_RAPHSON = "newton_raphson.jpg"
 
@@ -830,12 +833,19 @@ def _uri_svg(svg: str) -> str:
     return "data:image/svg+xml;base64," + base64.b64encode(svg.encode("utf-8")).decode("ascii")
 
 
+_MIMES = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
+          ".svg": "image/svg+xml", ".webp": "image/webp", ".gif": "image/gif"}
+
+
 @st.cache_data(show_spinner=False)
 def _uri_arquivo(nome: str):
+    """Lê assets/<nome> e devolve um data-URI para uso dentro de HTML próprio.
+    Retorna None (e registra nos logs) se o arquivo não existir."""
     caminho = ASSETS_DIR / nome
     if not caminho.exists():
+        print(f"[PowerFlow] imagem não encontrada: {caminho}")
         return None
-    mime = "image/png" if caminho.suffix.lower() == ".png" else "image/jpeg"
+    mime = _MIMES.get(caminho.suffix.lower(), "application/octet-stream")
     return f"data:{mime};base64," + base64.b64encode(caminho.read_bytes()).decode("ascii")
 
 
@@ -848,9 +858,25 @@ def _figuras_cache():
 
 
 def _figura(nome: str, legenda: str, largura_max: int = 760):
+    """Figura SVG gerada por código (funções fig_*)."""
     uri = _figuras_cache()[nome]
     st.markdown(
         f'<figure class="teo-fig"><img src="{uri}" alt="{legenda}" style="max-width:{largura_max}px"/>'
+        f'<figcaption>{legenda}</figcaption></figure>',
+        unsafe_allow_html=True,
+    )
+
+
+def _foto(arquivo: str, legenda: str, largura_max: int = 760, alt: str = None):
+    """Imagem própria da pasta assets/ (foto, caricatura, esquema escaneado),
+    com o mesmo visual e legenda das figuras SVG. Se o arquivo faltar, mostra
+    um aviso discreto em vez de deixar um espaço vazio."""
+    uri = _uri_arquivo(arquivo)
+    if uri is None:
+        st.caption(f"⚠️ Figura indisponível: {arquivo}")
+        return
+    st.markdown(
+        f'<figure class="teo-fig"><img src="{uri}" alt="{alt or legenda}" style="max-width:{largura_max}px"/>'
         f'<figcaption>{legenda}</figcaption></figure>',
         unsafe_allow_html=True,
     )
@@ -869,6 +895,9 @@ def _nota(texto: str, icone: str = "📌"):
         st.info(texto, icon=icone)
 
 
+# Obs.: .teo-card-fig precisa de width:100% e o <img> de height fixo. Sem isso,
+# um SVG sem width/height próprios dentro do card (flex centralizado) colapsa
+# para 0 × 0 px e o card fica em branco.
 CSS = """
 <style>
 .teo-card{background:#fff;border:2px solid #e0e0e0;border-radius:14px;padding:16px 10px 14px 10px;
@@ -876,32 +905,33 @@ CSS = """
   justify-content:center;gap:10px;transition:box-shadow .2s,border-color .2s,transform .18s;}
 .teo-card:hover{box-shadow:0 6px 24px rgba(25,118,210,.15);border-color:#1976d2;transform:translateY(-3px);}
 .teo-card.active{border-color:#1976d2;background:#e3f0fb;box-shadow:0 4px 18px rgba(25,118,210,.18);}
-.teo-card-fig{height:96px;display:flex;align-items:center;justify-content:center;}
-.teo-card-fig img{max-height:96px;max-width:100%;}
-.teo-card-fig img.foto{border-radius:10px;}
+.teo-card-fig{height:96px;width:100%;display:flex;align-items:center;justify-content:center;}
+.teo-card-fig img{height:96px;width:auto;max-width:100%;object-fit:contain;}
+.teo-card-fig img.foto{border-radius:10px;object-fit:cover;}
 .teo-card-icon{font-size:52px;line-height:1;}
 .teo-card-title{font-size:13px;font-weight:800;color:#111;margin:0;line-height:1.25;
   text-transform:uppercase;letter-spacing:.3px;}
 figure.teo-fig{margin:1.4rem auto 1.6rem auto;text-align:center;}
 figure.teo-fig img{width:100%;height:auto;border-radius:14px;border:1px solid #e0e0e0;background:#fff;}
 figure.teo-fig figcaption{font-size:13px;color:#757575;margin-top:8px;line-height:1.4;}
-.teo-historia img{width:100%;border-radius:14px;}
 </style>
 """
 
+# (chave, título, ícone SVG gerado por código, arquivo em assets/, texto alternativo)
+# Para trocar o ícone de um card por uma imagem sua: ícone = None e arquivo = "nome.jpg".
 TOPICOS = [
-    ("intro", "Introdução", "icone_sin", None),
-    ("linha", "Linha de Transmissão", "icone_pi", None),
-    ("trafo", "Modelo de Transformador", "icone_trafo", None),
-    ("ybus", "Matriz de Admitância", "icone_ybus", None),
-    ("mnr", "MNR", None, IMG_NEWTON_RAPHSON),
+    ("intro", "Introdução", "icone_sin", None, None),
+    ("linha", "Linha de Transmissão", "icone_pi", None, None),
+    ("trafo", "Modelo de Transformador", "icone_trafo", None, None),
+    ("ybus", "Matriz de Admitância", "icone_ybus", None, None),
+    ("mnr", "MNR", None, IMG_NEWTON_RAPHSON, "Caricatura de Isaac Newton e Joseph Raphson"),
 ]
 
 
-def _html_card(titulo, icone_svg, arquivo, ativo):
+def _html_card(titulo, icone_svg, arquivo, alt, ativo):
     if arquivo:
         uri = _uri_arquivo(arquivo)
-        midia = (f'<img class="foto" src="{uri}" alt="Caricatura de Isaac Newton e Joseph Raphson"/>'
+        midia = (f'<img class="foto" src="{uri}" alt="{alt or titulo}"/>'
                  if uri else '<div class="teo-card-icon">📐</div>')
     else:
         midia = f'<img src="{_figuras_cache()[icone_svg]}" alt="{titulo}"/>'
@@ -922,9 +952,9 @@ def render_teoria():
         st.session_state.teoria_topico = None
 
     cols = st.columns(len(TOPICOS), gap="small")
-    for col, (chave, titulo, icone, arquivo) in zip(cols, TOPICOS):
+    for col, (chave, titulo, icone, arquivo, alt) in zip(cols, TOPICOS):
         ativo = st.session_state.teoria_topico == chave
-        col.markdown(_html_card(titulo, icone, arquivo, ativo), unsafe_allow_html=True)
+        col.markdown(_html_card(titulo, icone, arquivo, alt, ativo), unsafe_allow_html=True)
         if col.button(f"Ver {titulo}", key=f"teo_{chave}", use_container_width=True,
                       type="primary" if ativo else "secondary"):
             st.session_state.teoria_topico = chave
@@ -1271,11 +1301,9 @@ def _mnr():
 
     col_img, col_txt = st.columns([2, 3], gap="large")
     with col_img:
-        uri = _uri_arquivo(IMG_NEWTON_RAPHSON)
-        if uri:
-            st.markdown(f'<div class="teo-historia"><img src="{uri}" alt="Caricatura de Isaac Newton e Joseph Raphson"/></div>',
-                        unsafe_allow_html=True)
-            st.caption("Isaac Newton e Joseph Raphson (caricatura).")
+        # Exemplo de imagem própria: arquivo em assets/, exibido com _foto().
+        _foto(IMG_NEWTON_RAPHSON, "Isaac Newton e Joseph Raphson (caricatura).", 520,
+              alt="Caricatura de Isaac Newton e Joseph Raphson, de costas um para o outro")
     with col_txt:
         st.markdown("#### Um pouco de história")
         st.markdown(r"""
