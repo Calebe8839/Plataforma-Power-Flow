@@ -15,6 +15,13 @@ except ImportError:
     st.error("⚠️ Arquivos do motor não encontrados. Verifique se ybus.py, mismatch.py, jacobian.py e newton_raphson.py estão na mesma pasta.")
     st.stop()
 
+# Sistemas exemplo (exemplos.py). Se o arquivo faltar, a plataforma funciona
+# normalmente, apenas sem o seletor de exemplos.
+try:
+    import exemplos as _exemplos
+except ImportError:
+    _exemplos = None
+
 # ======================================================
 # FUNÇÕES AUXILIARES
 # ======================================================
@@ -1499,17 +1506,76 @@ if st.session_state.pagina == "teoria":
 if st.session_state.pagina == "simulacao":
     st.markdown("## 🖥️ Simulação de Fluxo de Carga")
 
+    # Valores iniciais dos parâmetros. Os widgets abaixo usam key (sem value=) para
+    # que o carregamento de um exemplo possa ajustar base e unidade.
+    for _k, _v in {"par_tol": 1e-6, "par_max_iter": 20, "par_base": 100.0, "par_unidade": "MW / MVar"}.items():
+        st.session_state.setdefault(_k, _v)
+
+    # ------------------------------------------------------------
+    # SISTEMAS EXEMPLO
+    # Carregar um exemplo grava uma CÓPIA dele em sync_canvas_data (fonte da tabela
+    # e do diagrama) e incrementa exemplo_token. O token entra na key do diagrama e
+    # dos editores de tabela: assim eles são recriados com o sistema novo, e o
+    # diagrama só é substituído quando o estudante clica em Carregar.
+    # ------------------------------------------------------------
+    def _cb_carregar_exemplo():
+        chave = st.session_state.get("exemplo_escolhido")
+        if not chave or _exemplos is None:
+            return
+        ex = _exemplos.EXEMPLOS[chave]
+        st.session_state["sync_canvas_data"] = _exemplos.carregar_exemplo(chave)
+        st.session_state["exemplo_token"] = st.session_state.get("exemplo_token", 0) + 1
+        st.session_state["exemplo_ativo"] = chave
+        st.session_state["exemplo_aviso"] = True
+        st.session_state["par_base"] = float(ex["base_mva"])
+        st.session_state["par_unidade"] = "MW / MVar"
+        # Resultados do sistema anterior deixam de valer
+        st.session_state.pop("dados_tabela", None)
+        st.session_state.pop("assinatura_tabela", None)
+
+    if _exemplos is not None:
+        with st.container(border=True):
+            st.markdown("**📂 Sistemas exemplo**")
+            try:
+                col_ex1, col_ex2 = st.columns([3, 1], vertical_alignment="bottom")
+            except TypeError:   # Streamlit antigo, sem vertical_alignment
+                col_ex1, col_ex2 = st.columns([3, 1])
+            with col_ex1:
+                _opcoes_ex = [chave for chave, _ in _exemplos.opcoes_exemplos()]
+                st.selectbox(
+                    "Escolha um sistema clássico da literatura",
+                    options=_opcoes_ex,
+                    index=None,
+                    placeholder="Selecione um sistema...",
+                    format_func=lambda c: _exemplos.EXEMPLOS[c]["nome"],
+                    key="exemplo_escolhido",
+                )
+            with col_ex2:
+                st.button("Carregar sistema", key="btn_carregar_exemplo", use_container_width=True,
+                          on_click=_cb_carregar_exemplo,
+                          disabled=st.session_state.get("exemplo_escolhido") is None)
+            st.caption("⚠️ Carregar um exemplo substitui o sistema atual da tabela e do diagrama "
+                       "e apaga os resultados exibidos. Base e unidade passam para 100 MVA e MW / MVAr.")
+            _ativo = st.session_state.get("exemplo_ativo")
+            if _ativo in _exemplos.EXEMPLOS:
+                _ex = _exemplos.EXEMPLOS[_ativo]
+                if st.session_state.pop("exemplo_aviso", False):
+                    st.success(f"✅ {_ex['nome']} carregado. Confira os dados e clique em "
+                               "**Executar** (Tabela) ou **Calcular** (Diagrama) para resolver.")
+                st.caption(f"Último exemplo carregado: **{_ex['nome']}** — {_ex['descricao']}  \n"
+                           f"Fonte: {_ex['fonte']}")
+
     # Parâmetros do cálculo — dentro da página de simulação, em expander
     with st.expander("⚙️ Parâmetros do Cálculo e Base do Sistema", expanded=False):
         col_p1, col_p2, col_p3, col_p4 = st.columns(4)
         with col_p1:
-            tol_input = st.number_input("Tolerância (Erro Máximo)", value=1e-6, format="%e", step=1e-7)
+            tol_input = st.number_input("Tolerância (Erro Máximo)", format="%e", step=1e-7, key="par_tol")
         with col_p2:
-            max_iter_input = st.number_input("Máximo de Iterações", value=20, min_value=1, step=1)
+            max_iter_input = st.number_input("Máximo de Iterações", min_value=1, step=1, key="par_max_iter")
         with col_p3:
-            base_mva = st.number_input("Base (MVA)", value=100.0, step=10.0)
+            base_mva = st.number_input("Base (MVA)", step=10.0, key="par_base")
         with col_p4:
-            unidade = st.selectbox("Unidade de Potência", ["MW / MVar", "p.u."])
+            unidade = st.selectbox("Unidade de Potência", ["MW / MVar", "p.u."], key="par_unidade")
 
     divisor_potencia = base_mva if unidade == "MW / MVar" else 1.0
 
@@ -1585,16 +1651,25 @@ if st.session_state.pagina == "simulacao":
                 "Tap a (pu)":    pd.Series([], dtype=float),
             })
 
+        # Identidade dos editores: muda quando o sistema de origem muda ou quando um
+        # exemplo é (re)carregado. Assim "Carregar" sempre descarta as edições antigas,
+        # mesmo que o estudante recarregue o mesmo exemplo.
+        _id_editores = hashlib.md5(
+            f"{st.session_state.get('exemplo_token', 0)}|{canvas_data!r}".encode("utf-8")
+        ).hexdigest()[:10]
+
         col_t1, col_t2 = st.columns(2)
         with col_t1:
             st.subheader("Dados de Barras")
             df_barras_editado = st.data_editor(
                 df_barras_default, num_rows="dynamic", use_container_width=True,
-                column_config={"Tipo": st.column_config.SelectboxColumn(options=["Slack", "PV", "PQ"], required=True)}
+                column_config={"Tipo": st.column_config.SelectboxColumn(options=["Slack", "PV", "PQ"], required=True)},
+                key=f"ed_barras_{_id_editores}",
             )
         with col_t2:
             st.subheader("Dados de Linhas")
-            df_linhas_editado = st.data_editor(df_linhas_default, num_rows="dynamic", use_container_width=True)
+            df_linhas_editado = st.data_editor(df_linhas_default, num_rows="dynamic", use_container_width=True,
+                                               key=f"ed_linhas_{_id_editores}")
 
         st.subheader("Dados de Transformadores em-Fase")
         st.caption("Coluna **'De (lado tap)'** = barra k onde o tap $a$ atua. **'Tap a'** = relação $V_k/V_m$. Use $a=1.0$ para tap nominal.")
@@ -1602,7 +1677,8 @@ if st.session_state.pagina == "simulacao":
             df_trafos_default, num_rows="dynamic", use_container_width=True,
             column_config={
                 "Tap a (pu)": st.column_config.NumberColumn(min_value=0.01, max_value=5.0, step=0.01)
-            }
+            },
+            key=f"ed_trafos_{_id_editores}",
         )
 
         # Assinatura do conteúdo atual das tabelas (detecta edição após o cálculo)
@@ -1993,7 +2069,7 @@ if st.session_state.pagina == "simulacao":
                     let net_q = (g ? g.q : 0) - (c ? c.q : 0);
                     let topText = `Barra ${b.id}`, bottomText = "";
                     if (b.type === 'slack')      { topText += " (Slack)"; bottomText = `V=${b.v}∠${b.theta}°`; }
-                    else if (g)                  { bottomText = `V=${g.v} | Pliq=${net_p.toFixed(2)}`; }
+                    else if (g && b.type === 'PV') { bottomText = `V=${g.v} | Pliq=${net_p.toFixed(2)}`; }
                     else                         { bottomText = `P=${net_p.toFixed(2)}, Q=${net_q.toFixed(2)}`; }
                     const angle = (b.rotState || 0) * 90;
                     el.innerHTML = `<div class="label" style="top:-35px;">${topText}</div>
@@ -2355,9 +2431,19 @@ if st.session_state.pagina == "simulacao":
                         }
                         if (g) {
                             html += `<h5 style="margin:10px 0 5px 0;color:#d32f2f;border-bottom:1px solid #ddd;">⚙️ Gerador</h5>`;
-                            html += `<div class="prop-group"><label>Tensão V Fixa (pu)</label><input type="number" step="0.01" value="${g.v}" onchange="updateComponent('gerador','v',this.value)"></div>`;
-                            html += `<div class="prop-group"><label>Potência Ativa Pg</label><input type="number" step="0.1" value="${g.p}" onchange="updateComponent('gerador','p',this.value)"></div>`;
-                            html += `<div class="prop-group"><label>Potência Reativa Qg</label><input type="number" step="0.1" value="${g.q}" onchange="updateComponent('gerador','q',this.value)"></div>`;
+                            if (item.type === 'slack') {
+                                // Na Slack, Pg e Qg são incógnitas (subsistema 2): não há o que especificar.
+                                html += `<p style="font-size:12px;color:#555;margin:0 0 10px 0;">Pg e Qg da barra Slack são calculados após a convergência.</p>`;
+                            } else {
+                                // PV: V e Pg especificados (Qg é calculado). PQ com geração: Pg e Qg especificados.
+                                if (item.type === 'PV')
+                                    html += `<div class="prop-group"><label>Tensão V Fixa (pu)</label><input type="number" step="0.01" value="${g.v}" onchange="updateComponent('gerador','v',this.value)"></div>`;
+                                html += `<div class="prop-group"><label>Potência Ativa Pg</label><input type="number" step="0.1" value="${g.p}" onchange="updateComponent('gerador','p',this.value)"></div>`;
+                                if (item.type === 'PQ')
+                                    html += `<div class="prop-group"><label>Potência Reativa Qg</label><input type="number" step="0.1" value="${g.q}" onchange="updateComponent('gerador','q',this.value)"></div>`;
+                                else
+                                    html += `<p style="font-size:12px;color:#555;margin:0 0 10px 0;">Qg da barra PV é calculado após a convergência.</p>`;
+                            }
                         }
                         if (c) {
                             html += `<h5 style="margin:10px 0 5px 0;color:#1976d2;border-bottom:1px solid #ddd;">🔋 Carga</h5>`;
@@ -2461,7 +2547,9 @@ if st.session_state.pagina == "simulacao":
                             let obj = {
                                 id: b.id, tipo: b.type, bsh_bus: b.bsh_bus,
                                 p_ger: g ? g.p : 0, q_ger: g ? g.q : 0,
-                                p_carga: c ? c.p : 0, q_carga: c ? c.q : 0
+                                p_carga: c ? c.p : 0, q_carga: c ? c.q : 0,
+                                // Posição no desenho: permite redesenhar o diagrama ao voltar do Modo Tabela
+                                x: Math.round(b.x), y: Math.round(b.y), rot: b.rotState || 0
                             };
                             if (b.type === 'slack')      { obj.v = b.v; obj.theta = b.theta; }
                             else if (g)                  { obj.v = g.v; obj.theta = 0; }
@@ -2473,6 +2561,76 @@ if st.session_state.pagina == "simulacao":
                     };
                     sendMessageToStreamlit(sistema);
                 }
+
+                // ===================== CARREGAR SISTEMA VINDO DO PYTHON =====================
+                // O Python envia {sistema, token} a cada execução da página. O desenho só é
+                // substituído quando o token muda (estudante clicou em "Carregar sistema") ou
+                // quando o diagrama acabou de ser aberto (tokenCarregado ainda é null). Assim,
+                // interações comuns na página nunca apagam o que o estudante está desenhando.
+                let tokenCarregado = null;
+
+                function carregarSistema(sis) {
+                    const num = (v, padrao) => { const n = parseFloat(v); return Number.isFinite(n) ? n : padrao; };
+                    if (connectMode) toggleConnectMode(connectKind);
+                    selectElement(null, null);
+                    // Limpa tudo: elementos HTML do mundo (exceto a camada SVG) e a camada SVG
+                    Array.from(ws.children).forEach(el => { if (el !== svg) el.remove(); });
+                    svg.innerHTML = "";
+                    barras = []; linhas = []; transformadores = []; geradores = []; cargas = [];
+
+                    const lista = sis.barras || [];
+                    lista.forEach((d, i) => {
+                        const temXY = d.x !== undefined && d.x !== null && d.y !== undefined && d.y !== null;
+                        const ang = 2 * Math.PI * i / Math.max(lista.length, 1);   // sem coordenadas: barras em círculo
+                        const t = String(d.tipo).toLowerCase();
+                        const tipo = t === 'slack' ? 'slack' : (t === 'pv' ? 'PV' : 'PQ');
+                        const b = { id: parseInt(d.id), type: tipo,
+                                    x: temXY ? num(d.x, 300) : 900 + 400 * Math.cos(ang),
+                                    y: temXY ? num(d.y, 300) : 700 + 400 * Math.sin(ang),
+                                    v: num(d.v, 1.0), theta: num(d.theta, 0), bsh_bus: num(d.bsh_bus, 0),
+                                    rotState: ((parseInt(d.rot) || 0) % 4 + 4) % 4, el: null };
+                        barras.push(b);
+                        const pg = num(d.p_ger, 0), qg = num(d.q_ger, 0);
+                        if (tipo !== 'PQ' || pg !== 0 || qg !== 0)
+                            geradores.push({ id: idCounter++, barraId: b.id, p: pg, q: qg, v: b.v, el: null, elWire: null });
+                        const pc = num(d.p_carga, 0), qc = num(d.q_carga, 0);
+                        if (pc !== 0 || qc !== 0)
+                            cargas.push({ id: idCounter++, barraId: b.id, p: pc, q: qc, el: null, elWire: null });
+                    });
+                    busCounter = barras.length ? Math.max(...barras.map(b => b.id)) + 1 : 1;
+                    const existe = id => barras.some(b => b.id === id);
+
+                    (sis.linhas || []).forEach(d => {
+                        const l = { id: idCounter++, b1: parseInt(d.de), b2: parseInt(d.para),
+                                    r: num(d.r, 0), x: num(d.x, 0), bsh: num(d.bsh, 0),
+                                    elPath: null, elLabel: null, elSymbol: null };
+                        if (existe(l.b1) && existe(l.b2)) linhas.push(l);
+                    });
+                    (sis.transformadores || []).forEach(d => {
+                        const t = { id: idCounter++, bk: parseInt(d.de), bm: parseInt(d.para),
+                                    r: num(d.r, 0), x: num(d.x, 0.1), a: num(d.a, 1.0),
+                                    elPath: null, elLabel: null, elSymbol: null };
+                        if (existe(t.bk) && existe(t.bm)) transformadores.push(t);
+                    });
+
+                    barras.forEach(renderBarra);
+                    geradores.forEach(renderGerador);
+                    cargas.forEach(renderCarga);
+                    updateAllWires();          // desenha linhas, trafos e posiciona geradores/cargas
+                    ajustarATela();
+                    setTimeout(() => { ajustarATela(); updateAllWires(); }, 80);   // após o layout do iframe estabilizar
+                }
+
+                window.addEventListener("message", e => {
+                    const d = e.data;
+                    if (!d || d.type !== "streamlit:render") return;
+                    const a = d.args || {};
+                    const sis = a.sistema;
+                    if (!sis || !Array.isArray(sis.barras) || sis.barras.length === 0) return;
+                    if (tokenCarregado === a.token) return;
+                    tokenCarregado = a.token;
+                    try { carregarSistema(sis); } catch (err) { console.error("[PowerFlow] falha ao carregar o sistema:", err); }
+                });
             </script>
         </body>
         </html>
@@ -2484,7 +2642,16 @@ if st.session_state.pagina == "simulacao":
             f.write(html_canvas)
 
         componente_canvas = components.declare_component("canvas_sep", path=component_dir)
-        dados_canvas_bruto = componente_canvas(key="meu_canvas")
+        # O token do exemplo entra na key: ao carregar um exemplo, o diagrama é recriado
+        # (descarta o desenho e o último "Calcular" do sistema anterior). O sistema atual
+        # vai junto como argumento para o diagrama se redesenhar ao voltar do Modo Tabela.
+        _token_ex = st.session_state.get("exemplo_token", 0)
+        dados_canvas_bruto = componente_canvas(
+            key=f"meu_canvas_{_token_ex}",
+            sistema=st.session_state.get("sync_canvas_data"),
+            token=_token_ex,
+            default=None,
+        )
 
         if dados_canvas_bruto is not None:
             dados_para_calculo = dados_canvas_bruto
