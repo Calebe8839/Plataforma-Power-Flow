@@ -162,10 +162,27 @@ st.markdown('<hr class="pf-divider">', unsafe_allow_html=True)
 
 # ======================================================
 # PÁGINA: TUTORIAL
+# Vídeo do YouTube incorporado com st.video: toca dentro da própria plataforma.
+# Para trocar o vídeo, basta alterar URL_VIDEO_TUTORIAL.
+# Mantenha o vídeo nesta posição fixa: widgets condicionais inseridos ACIMA dele
+# podem fazer o Streamlit recriar o player e reiniciar a reprodução.
 # ======================================================
+URL_VIDEO_TUTORIAL = "https://www.youtube.com/watch?v=WEeXKu_f9WA"
+ALT_VIDEO_TUTORIAL = "Vídeo-tutorial: fluxo de carga pelo método de Newton-Raphson na plataforma Power Flow"
+
 if st.session_state.pagina == "tutorial":
     st.markdown("## 🎓 Tutorial da Plataforma PowerFlow")
-    st.info("Esta seção está em construção. Em breve trará guias passo a passo com exemplos resolvidos.", icon="🚧")
+    # Coluna central limita a largura do player no layout "wide" (evita um vídeo
+    # gigante em monitores grandes). No celular as colunas empilham e o vídeo
+    # ocupa a largura toda da tela.
+    _, col_video, _ = st.columns([1, 3, 1])
+    with col_video:
+        try:
+            st.video(URL_VIDEO_TUTORIAL, alt=ALT_VIDEO_TUTORIAL)
+        except TypeError:
+            # Versões antigas do Streamlit não têm o parâmetro alt
+            st.video(URL_VIDEO_TUTORIAL)
+        st.caption(f"Problemas para carregar o vídeo? [Assistir diretamente no YouTube]({URL_VIDEO_TUTORIAL})")
     st.stop()
 
 # ======================================================
